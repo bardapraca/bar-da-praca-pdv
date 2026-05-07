@@ -9,7 +9,6 @@ import {
   PackageSearch, TrendingUp, AlertTriangle, Edit, BarChart3, BrainCircuit, 
   DollarSign, Sparkles, Tag, Printer, Calendar as CalendarIcon, Filter, History, PlusCircle, User, Trash2, AlertOctagon, LogIn, Users, UserPlus
 } from "lucide-react";
-
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -24,7 +23,6 @@ export default function DashboardGlobal() {
   const [loginUsuario, setLoginUsuario] = useState("");
   const [loginSenha, setLoginSenha] = useState("");
   const [lembrarSenha, setLembrarSenha] = useState(false);
-  
   const [isRegistering, setIsRegistering] = useState(false);
   const [regNome, setRegNome] = useState("");
   const [regEmail, setRegEmail] = useState("");
@@ -41,7 +39,6 @@ export default function DashboardGlobal() {
   const [modalConfirmacaoAberto, setModalConfirmacaoAberto] = useState(false);
   const [fichaMesaAberta, setFichaMesaAberta] = useState(false);
   const [modalCheckoutAberto, setModalCheckoutAberto] = useState(false);
-  
   const [pessoasSplit, setPessoasSplit] = useState(1);
   const [pagamentosSplit, setPagamentosSplit] = useState<any[]>([]);
   const [pedidoAtual, setPedidoAtual] = useState<any[]>([]);
@@ -60,7 +57,7 @@ export default function DashboardGlobal() {
   const [insumosBase, setInsumosBase] = useState<any[]>([]);
   const [perdasHistorico, setPerdasHistorico] = useState<any[]>([]);
   const [usuariosEquipe, setUsuariosEquipe] = useState<any[]>([]);
-  
+
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todas");
   const [buscaProduto, setBuscaProduto] = useState("");
   const categorias = ["Todas", "Bebidas", "Drinks", "Porções", "Lanches"];
@@ -96,10 +93,14 @@ export default function DashboardGlobal() {
 
   const buscarProdutos = async () => { const { data } = await supabase.from('produtos').select('*').order('nome'); if (data) setProdutosBase(data); };
   const buscarMesas = async () => { const { data } = await supabase.from('mesas').select('*').order('numero'); if (data) setMesasReais(data); };
-  const buscarVendas = async () => { const { data } = await supabase.from('vendas').select('*').order('data_venda', { ascending: false }); if (data) setHistoricoVendas(data); };
-  const buscarInsumos = async () => { const { data } = await supabase.from('insumos').select('*').order('nome'); if (data) setInsumosBase(data); };
-  const buscarPerdas = async () => { const { data } = await supabase.from('perdas').select('*').order('data_perda', { ascending: false }); if (data) setPerdasHistorico(data); };
-  const buscarUsuarios = async () => { const { data } = await supabase.from('usuarios').select('*').order('nome'); if (data) setUsuariosEquipe(data); };
+  const buscarVendas = async () => { const { data } = await supabase.from('vendas').select('*').order('data_venda', { ascending: false });
+  if (data) setHistoricoVendas(data); };
+  const buscarInsumos = async () => { const { data } = await supabase.from('insumos').select('*').order('nome');
+  if (data) setInsumosBase(data); };
+  const buscarPerdas = async () => { const { data } = await supabase.from('perdas').select('*').order('data_perda', { ascending: false });
+  if (data) setPerdasHistorico(data); };
+  const buscarUsuarios = async () => { const { data } = await supabase.from('usuarios').select('*').order('nome');
+  if (data) setUsuariosEquipe(data); };
 
   // ================= SISTEMA DE LOGIN REAL =================
   const efetuarLogin = async (e: React.FormEvent) => {
@@ -107,12 +108,12 @@ export default function DashboardGlobal() {
     if (!loginUsuario || !loginSenha) return alert("Preencha email e senha.");
     try {
         const { data, error } = await supabase.from('usuarios').select('*').eq('email', loginUsuario).eq('senha', loginSenha).single();
-        if (error || !data) { alert("Email ou senha incorretos."); return; }
+        if (error || !data) { alert("Email ou senha incorretos."); return;
+        }
         setUsuarioAtual({ id: data.id, nome: data.nome, role: data.role });
         setVisaoAtiva("salao");
     } catch (err) { alert("Erro de conexão ao fazer login."); }
   };
-
   const registrarGerente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regNome || !regEmail || !regSenha) return alert("Preencha todos os campos.");
@@ -122,8 +123,7 @@ export default function DashboardGlobal() {
         alert("Gerente cadastrado com sucesso! Agora faça o login.");
         setIsRegistering(false);
     } catch (err: any) { 
-        // AQUI FOI ALTERADO PARA MOSTRAR O ERRO REAL DO SUPABASE
-        alert("ERRO DO BANCO DE DADOS: " + (err.message || err.details || JSON.stringify(err))); 
+        alert("ERRO DO BANCO DE DADOS: " + (err.message || err.details || JSON.stringify(err)));
     }
   };
 
@@ -152,6 +152,7 @@ export default function DashboardGlobal() {
            osc2.type = 'sine';
            osc2.frequency.setValueAtTime(880, audioCtx.currentTime);
            gain2.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        
            osc2.start();
            osc2.stop(audioCtx.currentTime + 0.15);
         }, 250);
@@ -162,7 +163,6 @@ export default function DashboardGlobal() {
   const dataAtual = new Date();
   const diaSemana = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(dataAtual);
   const dataFormatada = dataAtual.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
   const vendasFiltradas = useMemo(() => {
     const hoje = new Date();
     return historicoVendas.filter(v => {
@@ -173,13 +173,14 @@ export default function DashboardGlobal() {
         const umaSemanaAtras = new Date();
         umaSemanaAtras.setDate(hoje.getDate() - 7);
         return d >= umaSemanaAtras;
+     
       }
       if (periodoFiltro === "mes") return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
       if (periodoFiltro === "ano") return d.getFullYear() === hoje.getFullYear();
       return true;
     });
   }, [historicoVendas, periodoFiltro]);
-
+  
   const perdasFiltradas = useMemo(() => {
     const hoje = new Date();
     return perdasHistorico.filter(p => {
@@ -190,25 +191,26 @@ export default function DashboardGlobal() {
         const umaSemanaAtras = new Date();
         umaSemanaAtras.setDate(hoje.getDate() - 7);
         return d >= umaSemanaAtras;
+     
       }
       if (periodoFiltro === "mes") return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
       if (periodoFiltro === "ano") return d.getFullYear() === hoje.getFullYear();
       return true;
     });
   }, [perdasHistorico, periodoFiltro]);
-
+  
   const fatTotal = vendasFiltradas.reduce((acc, v) => acc + Number(v.total_venda || 0), 0);
   const lucTotal = vendasFiltradas.reduce((acc, v) => acc + Number(v.lucro_total || 0), 0);
   const margem = fatTotal > 0 ? (lucTotal / fatTotal) * 100 : 0;
   const totalPerdasFin = perdasFiltradas.reduce((acc, p) => acc + Number(p.custo_perda || 0), 0);
-
+  
   const dadosGrafico = useMemo(() => {
     return [...vendasFiltradas].reverse().map(v => ({
       data: new Date(v.data_venda).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       valor: Number(v.total_venda)
     }));
   }, [vendasFiltradas]);
-
+  
   const historicoAgrupado = useMemo(() => {
     if (periodoFiltro === "dia") return vendasFiltradas.map(v => ({ ...v, isConsolidated: false }));
     const map = new Map();
@@ -233,7 +235,6 @@ export default function DashboardGlobal() {
     setNovoInsumo({ nome: i.nome, formato: "unidade", custo_formato: i.custo_unidade.toString(), qtd_comprada: i.estoque.toString(), rendimento: "1" });
     setModalNovoInsumo(true);
   };
-
   const salvarInsumo = async () => {
     try {
         const formato = novoInsumo.formato;
@@ -242,13 +243,20 @@ export default function DashboardGlobal() {
         const rendimento = parseFloat(String(novoInsumo.rendimento).replace(',', '.')) || 1;
 
         if (custoFormato === 0 || qtdComprada === 0 || !novoInsumo.nome) return alert("Preencha o nome, o custo e a quantidade comprada.");
-
         let unidadeFinal = "UN"; let estoqueFinal = qtdComprada; let custoUnidadeFinal = custoFormato;
 
-        if (formato === "garrafa_ml") { unidadeFinal = "ML"; estoqueFinal = qtdComprada * rendimento; custoUnidadeFinal = custoFormato / rendimento; } 
-        else if (formato === "pacote_g") { unidadeFinal = "G"; estoqueFinal = qtdComprada * rendimento; custoUnidadeFinal = custoFormato / rendimento; } 
-        else if (formato === "kg") { unidadeFinal = "G"; estoqueFinal = qtdComprada * 1000; custoUnidadeFinal = custoFormato / 1000; } 
-        else if (formato === "litro") { unidadeFinal = "ML"; estoqueFinal = qtdComprada * 1000; custoUnidadeFinal = custoFormato / 1000; } 
+        if (formato === "garrafa_ml") { unidadeFinal = "ML";
+            estoqueFinal = qtdComprada * rendimento; custoUnidadeFinal = custoFormato / rendimento;
+        } 
+        else if (formato === "pacote_g") { unidadeFinal = "G";
+            estoqueFinal = qtdComprada * rendimento; custoUnidadeFinal = custoFormato / rendimento;
+        } 
+        else if (formato === "kg") { unidadeFinal = "G";
+            estoqueFinal = qtdComprada * 1000; custoUnidadeFinal = custoFormato / 1000;
+        } 
+        else if (formato === "litro") { unidadeFinal = "ML";
+            estoqueFinal = qtdComprada * 1000; custoUnidadeFinal = custoFormato / 1000;
+        } 
 
         if (insumoEmEdicao) {
             const insumoOriginal = insumosBase.find(ins => ins.id === insumoEmEdicao);
@@ -262,10 +270,11 @@ export default function DashboardGlobal() {
         setModalNovoInsumo(false); buscarInsumos();
     } catch (err: any) { alert("ERRO SUPABASE (Insumos): Verifique a estrutura da tabela no banco."); }
   };
-
+  
   // ================= GESTÃO DE PERDAS =================
   const abrirParaEdicaoPerda = (p: any) => {
-    setPerdaEmEdicao(p); setNovaPerda({ insumo_id: p.insumo_id, quantidade: p.quantidade.toString() }); setModalNovaPerda(true);
+    setPerdaEmEdicao(p);
+    setNovaPerda({ insumo_id: p.insumo_id, quantidade: p.quantidade.toString() }); setModalNovaPerda(true);
   };
 
   const registrarPerda = async () => {
@@ -299,7 +308,8 @@ export default function DashboardGlobal() {
             if (errEst) throw errEst;
         }
         setModalNovaPerda(false); buscarInsumos(); buscarPerdas();
-    } catch (err: any) { alert("ERRO SUPABASE (Perdas)."); }
+    } catch (err: any) { alert("ERRO SUPABASE (Perdas).");
+    }
   };
 
   // ================= GESTÃO DE EQUIPE =================
@@ -310,21 +320,23 @@ export default function DashboardGlobal() {
         if (error) throw error;
         setModalNovoUsuario(false); setNovoMembro({ nome: "", email: "", senha: "", role: "colaborador" }); buscarUsuarios();
     } catch (err: any) { 
-        // AQUI FOI ALTERADO PARA MOSTRAR O ERRO REAL DO SUPABASE NO COLABORADOR
-        alert("ERRO DO BANCO DE DADOS: " + (err.message || err.details || JSON.stringify(err))); 
+        alert("ERRO DO BANCO DE DADOS: " + (err.message || err.details || JSON.stringify(err)));
     }
   };
 
   const removerUsuario = async (id: string) => {
     if (confirm("Tem certeza que deseja remover este acesso?")) {
-        await supabase.from('usuarios').delete().eq('id', id); buscarUsuarios();
+        await supabase.from('usuarios').delete().eq('id', id);
+        buscarUsuarios();
     }
   };
 
   // ================= CARDÁPIO E RECEITAS =================
-  const abrirParaNovoProduto = () => { setProdutoEmEdicao(null); setNovoProd({ nome: "", categoria: "Bebidas", preco: "" }); setReceitaTemp([]); setModalNovoProduto(true); };
-  const abrirParaEdicaoProduto = (p: any) => { setProdutoEmEdicao(p.id); setNovoProd({ nome: p.nome, categoria: p.categoria || "Bebidas", preco: p.preco?.toString() || "" }); setReceitaTemp(p.receita || []); setModalNovoProduto(true); };
-
+  const abrirParaNovoProduto = () => { setProdutoEmEdicao(null);
+    setNovoProd({ nome: "", categoria: "Bebidas", preco: "" }); setReceitaTemp([]); setModalNovoProduto(true); };
+  const abrirParaEdicaoProduto = (p: any) => { setProdutoEmEdicao(p.id);
+    setNovoProd({ nome: p.nome, categoria: p.categoria || "Bebidas", preco: p.preco?.toString() || "" }); setReceitaTemp(p.receita || []); setModalNovoProduto(true); };
+  
   const adicionarIngrediente = () => {
     const insumo = insumosBase.find(i => i.id === ingredienteTemp.insumo_id);
     if(insumo && ingredienteTemp.qtd) {
@@ -339,26 +351,30 @@ export default function DashboardGlobal() {
     try {
         const custoCalculado = receitaTemp.reduce((acc, ing) => acc + (ing.custo_calculado || 0), 0);
         const precoParsed = parseFloat(String(novoProd.preco).replace(',', '.'));
-        const dados = { nome: novoProd.nome, categoria: novoProd.categoria, preco: isNaN(precoParsed) ? 0 : precoParsed, custo: custoCalculado, receita: receitaTemp, un: "UN" };
-
-        if (produtoEmEdicao) { const { error } = await supabase.from('produtos').update(dados).eq('id', produtoEmEdicao); if (error) throw error; } 
-        else { const { error } = await supabase.from('produtos').insert([dados]); if (error) throw error; }
+        const dados = { nome: novoProd.nome, categoria: novoProd.categoria, preco: isNaN(precoParsed) ?
+        0 : precoParsed, custo: custoCalculado, receita: receitaTemp, un: "UN" };
+        if (produtoEmEdicao) { const { error } = await supabase.from('produtos').update(dados).eq('id', produtoEmEdicao); if (error) throw error;
+        } 
+        else { const { error } = await supabase.from('produtos').insert([dados]);
+        if (error) throw error; }
         setModalNovoProduto(false); buscarProdutos();
     } catch (err: any) { alert("ERRO (Produtos): " + (err.message || JSON.stringify(err))); }
   };
 
-  // ================= CHECKOUT E ENCERRAMENTO =================
+  // ================= CHECKOUT, ENCERRAMENTO E EXCLUSÕES =================
   const handleSplitChange = (qtd: number) => {
-    if (qtd < 1) return; setPessoasSplit(qtd);
+    if (qtd < 1) return;
+    setPessoasSplit(qtd);
     const total = Number(mesaSelecionada?.total) || 0;
     const valorBase = Math.floor((total / qtd) * 100) / 100;
     const d = parseFloat((total - (valorBase * qtd)).toFixed(2));
     setPagamentosSplit(Array.from({ length: qtd }).map((_, i) => ({ id: i + 1, valor: i === qtd - 1 ? valorBase + d : valorBase, metodo: "PIX" })));
   };
 
-  const alterarMetodoPagamento = (id: number, novoMetodo: string) => { setPagamentosSplit(prev => prev.map(p => p.id === id ? { ...p, metodo: novoMetodo } : p)); };
+  const alterarMetodoPagamento = (id: number, novoMetodo: string) => { setPagamentosSplit(prev => prev.map(p => p.id === id ? { ...p, metodo: novoMetodo } : p));
+  };
   const abrirCheckout = () => { setFichaMesaAberta(false); handleSplitChange(1); setTimeout(() => setModalCheckoutAberto(true), 200); };
-
+  
   const finalizarPagamentoMesa = async () => {
     if (!mesaSelecionada) return;
     const totalVenda = parseFloat(Number(mesaSelecionada.total).toFixed(2));
@@ -366,33 +382,113 @@ export default function DashboardGlobal() {
     const custoVenda = parseFloat((totalVenda - lucroVenda).toFixed(2));
     const mesaNum = mesaSelecionada.numero === "Avulso" ? 0 : parseInt(mesaSelecionada.numero) || 0;
     const nomeCliente = mesaSelecionada.cliente || "Consumidor";
-
     try {
         const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalVenda, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: nomeCliente, mesa_numero: mesaNum }]);
         if (errVenda) throw errVenda;
 
-        const { error: errMesa } = await supabase.from('mesas').update({ status: 'livre', total: 0, cliente: null, itens: [] }).eq('id', mesaSelecionada.id);
+        // AQUI: Deleta a mesa para ela sumir da tela em vez de apenas limpar os itens
+        const { error: errMesa } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         if (errMesa) throw errMesa;
         
         setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); setTimeout(() => buscarVendas(), 400); 
-    } catch (err: any) { alert("ERRO SUPABASE (Vendas)."); }
+    } catch (err: any) { alert("ERRO SUPABASE (Vendas).");
+    }
+  };
+
+  const cancelarMesa = async (mesa: any, e: React.MouseEvent) => {
+    e.stopPropagation(); 
+    if (usuarioAtual?.role !== 'gerente') {
+      alert("Apenas o gerente pode excluir uma mesa.");
+      return;
+    }
+    if (confirm(`ATENÇÃO: Deseja realmente excluir a Mesa ${mesa.numero}? \n\nTodos os pedidos serão apagados, o valor NÃO será contabilizado no financeiro e os insumos voltarão automaticamente ao estoque.`)) {
+      try {
+        // 1. Estornar estoque dos itens que já estavam na mesa
+        if (mesa.itens && mesa.itens.length > 0) {
+          for (const item of mesa.itens) {
+            const p = produtosBase.find(pb => pb.id === item.id);
+            if (p && p.receita && Array.isArray(p.receita)) {
+              for (const ing of p.receita) {
+                const insumo = insumosBase.find(i => i.id === ing.insumo_id);
+                if (insumo) {
+                  let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
+                  const novoEstoque = insumo.estoque + qtdUsada; // DEVOLVE AO ESTOQUE
+                  await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
+                }
+              }
+            }
+          }
+        }
+        // 2. Excluir a mesa
+        const { error } = await supabase.from('mesas').delete().eq('id', mesa.id);
+        if (error) throw error;
+
+        buscarMesas();
+        buscarInsumos();
+        alert("Mesa excluída e estoque estornado com sucesso!");
+      } catch(err: any) {
+        alert("Erro ao excluir mesa e estornar estoque.");
+      }
+    }
+  };
+
+  const estornarItemDaComanda = async (mesa: any, indexItem: number, item: any) => {
+    if (usuarioAtual?.role !== 'gerente') {
+      alert("Apenas o gerente pode estornar itens da comanda.");
+      return;
+    }
+    if (confirm(`Deseja remover "${item.quantidade}x ${item.nome}" da comanda? \n\nO valor será descontado da mesa e o estoque será devolvido.`)) {
+      try {
+        // 1. Estornar estoque
+        const p = produtosBase.find(pb => pb.id === item.id);
+        if (p && p.receita && Array.isArray(p.receita)) {
+          for (const ing of p.receita) {
+            const insumo = insumosBase.find(i => i.id === ing.insumo_id);
+            if (insumo) {
+              let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
+              const novoEstoque = insumo.estoque + qtdUsada;
+              await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
+            }
+          }
+        }
+
+        // 2. Atualizar a mesa no banco
+        const novosItens = [...mesa.itens];
+        novosItens.splice(indexItem, 1); 
+        const valorDescontado = item.preco * item.quantidade;
+        const novoTotal = Math.max(0, mesa.total - valorDescontado);
+
+        const { error } = await supabase.from('mesas').update({ itens: novosItens, total: novoTotal }).eq('id', mesa.id);
+        if (error) throw error;
+
+        setMesaSelecionada({ ...mesa, itens: novosItens, total: novoTotal });
+        buscarMesas();
+        buscarInsumos();
+        alert("Item estornado com sucesso!");
+      } catch(err: any) {
+        alert("Erro ao estornar item.");
+      }
+    }
   };
 
   // ================= SALÃO E OPERAÇÕES =================
   const adicionarMesaSalao = async () => {
     try {
-        const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ? Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
+        const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ?
+        Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
         const { error } = await supabase.from('mesas').insert([{ numero: prox, status: 'livre', total: 0, itens: [] }]);
         if (error) throw error; buscarMesas();
     } catch (err: any) { alert("ERRO SUPABASE (Adicionar Mesa)."); }
   };
-
+  
   const interagirComMesa = (mesa: any) => {
-    if (mesa.status === "livre") { setInputMesaNova(mesa.numero.toString()); setInputNomeCliente(""); setTipoAtendimento("mesa"); setModalNovaComanda(true); } 
+    if (mesa.status === "livre") { setInputMesaNova(mesa.numero.toString()); setInputNomeCliente(""); setTipoAtendimento("mesa"); setModalNovaComanda(true);
+    } 
     else { setMesaSelecionada(mesa); setFichaMesaAberta(true); }
   };
 
-  const abrirNovoAtendimento = () => { setInputMesaNova(""); setInputNomeCliente(""); setTipoAtendimento("avulso"); setModalNovaComanda(true); };
+  const abrirNovoAtendimento = () => { setInputMesaNova(""); setInputNomeCliente("");
+    setTipoAtendimento("avulso"); setModalNovaComanda(true); };
 
   const iniciarAtendimento = async () => {
     try {
@@ -407,24 +503,27 @@ export default function DashboardGlobal() {
                 if(error) throw error; if (data) novaMesa = data[0];
             }
         } else {
-            const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ? Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
+            const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ?
+            Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
             const { data, error } = await supabase.from('mesas').insert([{ numero: prox, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] }]).select();
             if(error) throw error; if (data) novaMesa = data[0];
         }
         setMesaSelecionada(novaMesa); setModalNovaComanda(false); setPedidoAtual([]); buscarMesas();
         setTimeout(() => { setBuscaProduto(""); setCategoriaAtiva("Todas"); setMenuLateralAberto(true); }, 150);
-    } catch (err: any) { alert("ERRO SUPABASE (Abertura de Mesa)."); }
+    } catch (err: any) { alert("ERRO SUPABASE (Abertura de Mesa).");
+    }
   };
 
-  const adicionarItem = (p: any) => { setPedidoAtual(prev => { const e = prev.find(i => i.id === p.id); return e ? prev.map(i => i.id === p.id ? { ...i, quantidade: i.quantidade + 1 } : i) : [...prev, { ...p, quantidade: 1 }]; }); };
-  const removerItem = (id: string) => { setPedidoAtual(prev => { const e = prev.find(i => i.id === id); return e && e.quantidade > 1 ? prev.map(i => i.id === id ? { ...i, quantidade: i.quantidade - 1 } : i) : prev.filter(i => i.id !== id); }); };
+  const adicionarItem = (p: any) => { setPedidoAtual(prev => { const e = prev.find(i => i.id === p.id); return e ? prev.map(i => i.id === p.id ? { ...i, quantidade: i.quantidade + 1 } : i) : [...prev, { ...p, quantidade: 1 }]; });
+  };
+  const removerItem = (id: string) => { setPedidoAtual(prev => { const e = prev.find(i => i.id === id); return e && e.quantidade > 1 ? prev.map(i => i.id === id ? { ...i, quantidade: i.quantidade - 1 } : i) : prev.filter(i => i.id !== id); });
+  };
 
   // ================= INTEGRAÇÃO KDS E BAIXA ESTOQUE =================
   const confirmarEEnviarPedido = async () => {
     try {
         const numMesaApoio = mesaSelecionada?.numero || inputMesaNova || "Avulso";
         const clienteApoio = mesaSelecionada?.cliente || inputNomeCliente || "Cliente";
-
         if (pedidoAtual.length > 0) {
             const novoPedidoCozinha = { id: Date.now().toString(), mesa: numMesaApoio, cliente: clienteApoio, itens: [...pedidoAtual], hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
             setPedidosPendentes(prev => [...prev, novoPedidoCozinha]);
@@ -442,10 +541,8 @@ export default function DashboardGlobal() {
             if (index >= 0) { itensAtualizados[index].quantidade += itemNovo.quantidade; } 
             else { itensAtualizados.push({ ...itemNovo }); }
         });
-
         const { error: errMesa } = await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('id', mesaId);
         if(errMesa) throw errMesa;
-
         if (mesaSelecionada) setMesaSelecionada({ ...mesaSelecionada, total: totalNovo, itens: itensAtualizados });
         
         for (const item of pedidoAtual) {
@@ -463,10 +560,11 @@ export default function DashboardGlobal() {
           }
         }
         
-        setModalConfirmacaoAberto(false); setMenuLateralAberto(false); setPedidoAtual([]); buscarInsumos(); buscarMesas();
+        setModalConfirmacaoAberto(false);
+        setMenuLateralAberto(false); setPedidoAtual([]); buscarInsumos(); buscarMesas();
     } catch(err: any) { alert("ERRO SUPABASE (Lançar Pedido)."); }
   };
-
+  
   const itensExibidosCardapio = produtosBase.filter(item => {
     const matchBusca = item.nome.toLowerCase().includes(buscaProduto.toLowerCase());
     const matchCat = categoriaAtiva === "Todas" || item.categoria === categoriaAtiva;
@@ -522,10 +620,10 @@ export default function DashboardGlobal() {
                 
                 <div className="flex items-center justify-between px-2 pt-2">
                    <label className="flex items-center gap-2 cursor-pointer group">
-                      <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="accent-yellow-500 w-4 h-4 rounded-sm bg-zinc-950 border-zinc-800 cursor-pointer" />
+                       <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="accent-yellow-500 w-4 h-4 rounded-sm bg-zinc-950 border-zinc-800 cursor-pointer" />
                       <span className="text-[10px] font-black uppercase text-zinc-500 group-hover:text-zinc-300 transition-colors">Lembrar Senha</span>
                    </label>
-                   <button type="button" onClick={() => setIsRegistering(true)} className="text-[10px] font-black uppercase text-yellow-500 hover:text-yellow-400 transition-colors">Criar Conta Mestre</button>
+                  <button type="button" onClick={() => setIsRegistering(true)} className="text-[10px] font-black uppercase text-yellow-500 hover:text-yellow-400 transition-colors">Criar Conta Mestre</button>
                 </div>
 
                 <button type="submit" className="w-full mt-4 bg-yellow-500 text-zinc-950 font-black py-4 rounded-2xl text-lg italic uppercase shadow-xl hover:bg-yellow-400 active:scale-95 transition-all flex items-center justify-center gap-2">
@@ -569,7 +667,7 @@ export default function DashboardGlobal() {
 
         <div className="hidden md:flex items-center gap-3 bg-zinc-950 p-2 pr-4 rounded-xl border border-zinc-800">
            <div className="h-8 w-8 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-700">
-             <User size={14} className="text-yellow-500" />
+              <User size={14} className="text-yellow-500" />
            </div>
            <div className="flex flex-col pr-4 border-r border-zinc-800">
              <span className="text-[9px] font-black uppercase text-zinc-500 leading-tight tracking-widest">{usuarioAtual?.role}</span>
@@ -606,8 +704,7 @@ export default function DashboardGlobal() {
                 <div className="bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-800 shadow-2xl overflow-hidden print:border-zinc-300">
                     <h3 className="text-xl font-black text-white uppercase italic mb-6 flex items-center gap-2 print:text-black"><History className="text-yellow-500" size={20}/> Relatório de {periodoFiltro}</h3>
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide print:max-h-none print:overflow-visible">
-                        {historicoAgrupado.length === 0 ?
-                        <p className="text-zinc-600 italic text-center py-6 font-black uppercase">Sem dados</p> : (
+                        {historicoAgrupado.length === 0 ? <p className="text-zinc-600 italic text-center py-6 font-black uppercase">Sem dados</p> : (
                           historicoAgrupado.map((v: any, idx) => (
                             <div key={idx} className="bg-zinc-950 p-4 rounded-2xl border border-zinc-800 flex justify-between items-center transition-all hover:border-zinc-700 print:bg-white print:border-zinc-300">
                                 {v.isConsolidated ? (
@@ -651,9 +748,11 @@ export default function DashboardGlobal() {
           {/* SUB-ABA ESTOQUE */}
           {visaoGestao === "estoque" && (
             <div className="animate-in fade-in">
-              <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black uppercase italic tracking-tighter">Insumos e Matéria Prima</h2><button onClick={() => { setInsumoEmEdicao(null); setNovoInsumo({ nome: "", formato: "unidade", custo_formato: "", qtd_comprada: "", rendimento: "" }); setModalNovoInsumo(true); }} className="bg-zinc-100 text-zinc-950 font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-white shadow-2xl transition-all"><Plus size={18}/> ADICIONAR INSUMO</button></div>
+              <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black uppercase italic tracking-tighter">Insumos e Matéria Prima</h2><button onClick={() => { setInsumoEmEdicao(null);
+              setNovoInsumo({ nome: "", formato: "unidade", custo_formato: "", qtd_comprada: "", rendimento: "" }); setModalNovoInsumo(true);
+              }} className="bg-zinc-100 text-zinc-950 font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-white shadow-2xl transition-all"><Plus size={18}/> ADICIONAR INSUMO</button></div>
               <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"><table className="w-full text-left font-bold text-sm"><thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800"><tr><th className="p-6">Insumo</th><th className="p-6">Estoque Atual</th><th className="p-6">Custo Exato</th><th className="p-6 text-center uppercase">Ações</th></tr></thead><tbody>{insumosBase.map(i => (<tr key={i.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors"><td className="p-6 font-black uppercase">{i.nome}</td><td className="p-6"><Badge variant="outline" className={i.estoque < 1000 && i.unidade !== 'UN' ? "border-red-500 text-red-400 bg-red-500/5" : "border-zinc-700 text-zinc-400"}>{i.estoque} {i.unidade}</Badge></td><td className="p-6 text-zinc-400">R$ {i.custo_unidade.toFixed(4)} / {i.unidade}</td><td className="p-6 text-center"><button onClick={() => abrirParaEdicaoInsumo(i)} className="p-2 text-zinc-500 hover:text-yellow-500 transition-all"><Edit size={18}/></button></td></tr>))}</tbody></table></div>
-           </div>
+            </div>
           )}
 
           {/* SUB-ABA PERDAS */}
@@ -665,15 +764,16 @@ export default function DashboardGlobal() {
                       <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
                           {["dia", "semana", "mes", "ano"].map(p => (<button key={p} onClick={() => setPeriodoFiltro(p as any)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${periodoFiltro === p ? 'bg-red-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>{p}</button>))}
                       </div>
-                      <button onClick={() => { setPerdaEmEdicao(null); setNovaPerda({ insumo_id: "", quantidade: "" }); setModalNovaPerda(true); }} className="bg-red-600 text-zinc-50 font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-red-500 shadow-2xl transition-all shrink-0"><AlertOctagon size={18}/> REGISTRAR PERDA</button>
+                      <button onClick={() => { setPerdaEmEdicao(null);
+                      setNovaPerda({ insumo_id: "", quantidade: "" }); setModalNovaPerda(true); }} className="bg-red-600 text-zinc-50 font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-red-500 shadow-2xl transition-all shrink-0"><AlertOctagon size={18}/> REGISTRAR PERDA</button>
                   </div>
               </div>
               <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl">
                   <table className="w-full text-left font-bold text-sm">
-                     <thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
+                      <thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
                           <tr><th className="p-6">Insumo Perdido</th><th className="p-6">Quantidade</th><th className="p-6 text-red-500">Custo do Prejuízo</th><th className="p-6">Data</th><th className="p-6 text-center uppercase">Ações</th></tr>
                       </thead>
-                  <tbody>
+                      <tbody>
                           {perdasFiltradas.length === 0 ? (
                               <tr><td colSpan={5} className="p-6 text-center text-zinc-500 italic uppercase font-black">Nenhuma perda no período ({periodoFiltro})</td></tr>
                           ) : (
@@ -685,11 +785,11 @@ export default function DashboardGlobal() {
                                       <td className="p-6 text-zinc-500 text-xs">{new Date(p.data_perda).toLocaleDateString()}</td>
                                       <td className="p-6 text-center"><button onClick={() => abrirParaEdicaoPerda(p)} className="p-2 text-zinc-500 hover:text-yellow-500 transition-all"><Edit size={18}/></button></td>
                                   </tr>
-                                ))
+                              ))
                           )}
                       </tbody>
                   </table>
-              </div>
+               </div>
              </div>
           )}
 
@@ -711,7 +811,7 @@ export default function DashboardGlobal() {
             <div className="flex items-center gap-4">
                 {usuarioAtual?.role === 'gerente' && (
                     <button onClick={() => setModalPedidosAberto(true)} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs transition-all shadow-xl ${pedidosPendentes.length > 0 ? 'bg-red-600 text-white animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.6)]' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-yellow-500'}`}>
-                        <ChefHat size={16}/> PEDIDOS DE PREPARO {pedidosPendentes.length > 0 && `(${pedidosPendentes.length})`}
+                         <ChefHat size={16}/> PEDIDOS DE PREPARO {pedidosPendentes.length > 0 && `(${pedidosPendentes.length})`}
                     </button>
                 )}
                 <button onClick={abrirNovoAtendimento} className="bg-zinc-900 text-zinc-400 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:text-yellow-500 transition-all shadow-xl"><PlusCircle size={16}/> NOVO ATENDIMENTO</button>
@@ -720,7 +820,19 @@ export default function DashboardGlobal() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
              {mesasReais.map((m) => (
               <div key={m.id} onClick={() => interagirComMesa(m)} className={`p-6 rounded-[2rem] border h-44 flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.03] active:scale-95 shadow-lg ${m.status === 'livre' ? 'bg-zinc-900/40 border-zinc-800' : 'bg-yellow-500/10 border-yellow-500/50 shadow-yellow-500/5'}`}>
-                <div className="flex justify-between items-start"><span className={`text-4xl font-black italic tracking-tighter ${m.status === 'livre' ? 'text-zinc-700' : 'text-yellow-500'}`}>{m.numero.toString().padStart(2, '0')}</span>{m.status === 'ocupada' && <Badge className="bg-yellow-500 text-zinc-950 font-black text-[10px] uppercase max-w-[80px] truncate">{m.cliente}</Badge>}</div>
+                <div className="flex justify-between items-start">
+                    <span className={`text-4xl font-black italic tracking-tighter ${m.status === 'livre' ? 'text-zinc-700' : 'text-yellow-500'}`}>
+                        {m.numero.toString().padStart(2, '0')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                        {m.status === 'ocupada' && <Badge className="bg-yellow-500 text-zinc-950 font-black text-[10px] uppercase max-w-[80px] truncate">{m.cliente}</Badge>}
+                        {usuarioAtual?.role === 'gerente' && (
+                            <button onClick={(e) => cancelarMesa(m, e)} className="text-zinc-600 hover:text-red-500 transition-colors p-1" title="Cancelar Mesa e Estornar Estoque">
+                                <Trash2 size={16} />
+                            </button>
+                        )}
+                    </div>
+                </div>
                 <p className={`text-sm font-black tracking-widest uppercase ${m.status === 'livre' ? 'text-zinc-600' : 'text-yellow-500'}`}>{m.status === 'livre' ? 'Livre' : `R$ ${Number(m.total).toFixed(2).replace('.', ',')}`}</p>
               </div>
             ))}
@@ -731,7 +843,7 @@ export default function DashboardGlobal() {
       {/* COZINHA / KDS */}
       <Sheet open={modalPedidosAberto} onOpenChange={setModalPedidosAberto}>
         <SheetContent className="w-full sm:max-w-md bg-zinc-950 border-zinc-800 p-0 flex flex-col text-zinc-50 shadow-2xl">
-            <div className="p-8 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
+             <div className="p-8 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
             <SheetTitle className="text-3xl font-black text-yellow-500 italic uppercase">Cozinha / Preparo</SheetTitle>
             <p className="text-xs text-zinc-400 mt-2">Gerencie os pedidos que precisam ser preparados e entregues.</p>
           </div>
@@ -748,23 +860,23 @@ export default function DashboardGlobal() {
                           </div>
                           <span className="text-xs font-black text-red-400"><Clock size={12} className="inline mr-1"/>{pedido.hora}</span>
                       </div>
-                       <div className="p-4 space-y-3">
+                      <div className="p-4 space-y-3">
                           {pedido.itens.map((item: any, idx: number) => (
                               <div key={idx} className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800">
-                               <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3">
                                       <span className="text-xl font-black text-yellow-500 italic">x{item.quantidade}</span>
                                       <span className="font-bold text-sm uppercase text-zinc-200">{item.nome}</span>
-                                  </div>
+                               </div>
                               </div>
                           ))}
-                          </div>
+                       </div>
                       <div className="p-4 border-t border-zinc-800 bg-zinc-950/50">
                           <button onClick={() => setPedidosPendentes(prev => prev.filter(p => p.id !== pedido.id))} className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl text-sm uppercase italic transition-all flex justify-center items-center gap-2">
-                               <CheckCircle size={18} /> Finalizar e Entregar
+                                <CheckCircle size={18} /> Finalizar e Entregar
                           </button>
                       </div>
                   </div>
-                  ))
+               ))
             )}
           </div>
         </SheetContent>
@@ -774,7 +886,7 @@ export default function DashboardGlobal() {
       <Sheet open={menuLateralAberto} onOpenChange={setMenuLateralAberto}>
         <SheetContent className="w-full sm:max-w-md bg-zinc-950 border-zinc-800 p-0 flex flex-col text-zinc-50 shadow-2xl">
           <div className="p-8 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
-            <SheetTitle className="text-3xl font-black text-yellow-500 italic uppercase">Cardápio</SheetTitle>
+             <SheetTitle className="text-3xl font-black text-yellow-500 italic uppercase">Cardápio</SheetTitle>
             <div className="relative mt-6">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
               <Input placeholder="BUSCAR PRODUTO..." value={buscaProduto} onChange={(e) => setBuscaProduto(e.target.value)} className="bg-zinc-900 border-zinc-800 pl-12 h-14 rounded-2xl font-black uppercase italic tracking-tighter focus:ring-yellow-500" />
@@ -792,10 +904,10 @@ export default function DashboardGlobal() {
                 <div key={item.id} className={`p-5 rounded-[1.5rem] border transition-all flex justify-between items-center ${qtd > 0 ? 'border-yellow-500/40 bg-yellow-500/5 shadow-inner' : 'border-zinc-800 bg-zinc-900/30'}`}>
                   <div><p className="font-black uppercase tracking-tighter text-zinc-100">{item.nome}</p><p className="text-yellow-500 font-black text-lg italic tracking-tighter leading-tight">R$ {item.preco.toFixed(2)}</p></div>
                   <div className="flex items-center gap-4 bg-zinc-950 p-2 rounded-2xl border border-zinc-800 shadow-xl">
-                    <button onClick={() => removerItem(item.id)} className="h-8 w-8 rounded-xl bg-zinc-900 text-red-500 flex items-center justify-center hover:bg-red-500/10"><Minus size={18}/></button>
+                     <button onClick={() => removerItem(item.id)} className="h-8 w-8 rounded-xl bg-zinc-900 text-red-500 flex items-center justify-center hover:bg-red-500/10"><Minus size={18}/></button>
                     <span className="font-black text-xl italic w-6 text-center">{qtd}</span>
                     <button onClick={() => adicionarItem(item)} className="h-8 w-8 rounded-xl bg-yellow-500 text-zinc-950 flex items-center justify-center"><Plus size={18}/></button>
-                 </div>
+                  </div>
                 </div>
               )
             })}
@@ -809,8 +921,7 @@ export default function DashboardGlobal() {
         <DialogContent className="sm:max-w-[550px] bg-zinc-950 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-10 shadow-2xl">
           <DialogTitle className="text-3xl font-black uppercase text-center italic tracking-tighter">Recebimento</DialogTitle>
           <div className="mt-8 space-y-6">
-            
-            <div className="bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800/50 max-h-[180px] overflow-y-auto scrollbar-hide space-y-2">
+             <div className="bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800/50 max-h-[180px] overflow-y-auto scrollbar-hide space-y-2">
                <Label className="text-zinc-500 font-black uppercase text-[10px] mb-2 block tracking-widest">Resumo do Pedido</Label>
                {mesaSelecionada?.itens && mesaSelecionada.itens.length > 0 ? (
                    mesaSelecionada.itens.map((item: any, idx: number) => (
@@ -821,17 +932,17 @@ export default function DashboardGlobal() {
                    ))
                ) : (
                    <p className="text-[10px] text-zinc-600 italic">Sem itens registrados.</p>
-               )}
+                )}
                <div className="border-t border-zinc-800 mt-2 pt-2 flex justify-between font-black text-yellow-500 text-lg italic">
                   <span>TOTAL A PAGAR</span>
                   <span>R$ {Number(mesaSelecionada?.total || 0).toFixed(2)}</span>
                </div>
             </div>
 
-            <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 text-center"><Label className="text-zinc-500 font-black uppercase text-[10px] mb-4 block">Dividir conta</Label><div className="flex items-center justify-center gap-8 mt-2"><button onClick={() => handleSplitChange(pessoasSplit - 1)} className="h-12 w-12 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-400"><Minus size={24}/></button><span className="text-4xl font-black italic text-white">{pessoasSplit}</span><button onClick={() => handleSplitChange(pessoasSplit + 1)} className="h-12 w-12 bg-yellow-500 text-zinc-950 rounded-full flex items-center justify-center"><Plus size={24}/></button></div></div>
+             <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 text-center"><Label className="text-zinc-500 font-black uppercase text-[10px] mb-4 block">Dividir conta</Label><div className="flex items-center justify-center gap-8 mt-2"><button onClick={() => handleSplitChange(pessoasSplit - 1)} className="h-12 w-12 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-400"><Minus size={24}/></button><span className="text-4xl font-black italic text-white">{pessoasSplit}</span><button onClick={() => handleSplitChange(pessoasSplit + 1)} className="h-12 w-12 bg-yellow-500 text-zinc-950 rounded-full flex items-center justify-center"><Plus size={24}/></button></div></div>
             <div className="max-h-[200px] overflow-y-auto space-y-3 scrollbar-hide">
               {pagamentosSplit.map((pag) => (
-                <div key={pag.id} className="flex justify-between items-center bg-zinc-900 p-4 rounded-xl border border-zinc-800">
+                 <div key={pag.id} className="flex justify-between items-center bg-zinc-900 p-4 rounded-xl border border-zinc-800">
                  <div><p className="text-[10px] font-black text-zinc-500 uppercase">Pessoa {pag.id}</p><p className="text-lg font-black text-yellow-500 italic leading-none">R$ {pag.valor.toFixed(2)}</p></div>
                   <div className="flex gap-1 flex-wrap">
                     {["PIX", "DÉBITO", "CRÉDITO", "DINHEIRO"].map(m => (<button key={m} onClick={() => alterarMetodoPagamento(pag.id, m)} className={`px-2 py-1 rounded-md text-[8px] font-black border transition-all ${pag.metodo === m ? 'bg-yellow-500 text-zinc-950 border-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-600'}`}>{m}</button>))}
@@ -849,19 +960,19 @@ export default function DashboardGlobal() {
         <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-10 shadow-2xl">
             <DialogTitle className="text-3xl font-black text-blue-500 uppercase italic tracking-tighter">Novo Colaborador</DialogTitle>
             <div className="space-y-6 mt-8">
-                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Nome Completo</Label><Input value={novoMembro.nome} onChange={e => setNovoMembro({...novoMembro, nome: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
+                 <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Nome Completo</Label><Input value={novoMembro.nome} onChange={e => setNovoMembro({...novoMembro, nome: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
                 <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Email de Acesso (Login)</Label><Input type="email" value={novoMembro.email} onChange={e => setNovoMembro({...novoMembro, email: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
                 <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Senha do Colaborador</Label><Input type="password" value={novoMembro.senha} onChange={e => setNovoMembro({...novoMembro, senha: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
                 <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Nível de Acesso</Label>
                     <select value={novoMembro.role} onChange={e => setNovoMembro({...novoMembro, role: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 h-14 rounded-xl px-4 text-zinc-200 font-bold outline-none">
                         <option value="colaborador">Colaborador / Garçom (Apenas Salão)</option>
-                        <option value="gerente">Gerente (Acesso Total)</option>
+                         <option value="gerente">Gerente (Acesso Total)</option>
                     </select>
                 </div>
             </div>
             <button onClick={salvarNovoUsuario} className="w-full mt-10 bg-blue-600 text-white font-black py-5 rounded-[1.5rem] text-xl italic shadow-xl hover:bg-blue-500 transition-all">Liberar Acesso</button>
         </DialogContent>
-      </Dialog>
+       </Dialog>
 
       {/* CADASTRO DE PRODUTO DO CARDÁPIO */}
       <Dialog open={modalNovoProduto} onOpenChange={setModalNovoProduto}>
@@ -880,35 +991,33 @@ export default function DashboardGlobal() {
                 </div>
                 
                 {(novoProd.categoria === 'Drinks' || novoProd.categoria === 'Porções') && (
-                    <p className="text-[10px] text-zinc-400 italic">Dica: Selecione o insumo e a quantidade, depois clique no <strong className="text-yellow-500">+</strong>. Você pode adicionar vários itens sucessivamente para compor sua receita (Ex: 300g de Batata + 300g de Calabresa).</p>
+                     <p className="text-[10px] text-zinc-400 italic">Dica: Selecione o insumo e a quantidade, depois clique no <strong className="text-yellow-500">+</strong>. Você pode adicionar vários itens sucessivamente para compor sua receita (Ex: 300g de Batata + 300g de Calabresa).</p>
                 )}
 
                 <div className="flex gap-2 items-center mt-2">
-                    <select value={ingredienteTemp.insumo_id} 
-                    onChange={e => setIngredienteTemp({...ingredienteTemp, insumo_id: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-800 h-12 rounded-xl px-4 text-zinc-200 text-xs font-bold outline-none truncate min-w-[120px]">
+                    <select value={ingredienteTemp.insumo_id} onChange={e => setIngredienteTemp({...ingredienteTemp, insumo_id: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-800 h-12 rounded-xl px-4 text-zinc-200 text-xs font-bold outline-none truncate min-w-[120px]">
                         <option value="">Selecione o Insumo no Estoque...</option>
                         {insumosBase.map(i => <option key={i.id} value={i.id}>{i.nome} (Estoque em {i.unidade})</option>)}
-                    </select>
+                     </select>
                   
                     <div className="relative w-24 shrink-0">
                         <Input placeholder="Qtd" value={ingredienteTemp.qtd} onChange={e => setIngredienteTemp({...ingredienteTemp, qtd: e.target.value})} className="bg-zinc-900 border-zinc-800 h-12 rounded-xl text-center font-bold text-xs w-full pr-6" />
-                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-zinc-500 uppercase pointer-events-none">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-zinc-500 uppercase pointer-events-none">
                             {insumosBase.find(i => i.id === ingredienteTemp.insumo_id)?.unidade || ''}
                         </span>
                     </div>
                     
                     <button onClick={adicionarIngrediente} className="h-12 w-12 shrink-0 bg-yellow-500 text-zinc-950 rounded-xl flex items-center justify-center hover:bg-yellow-400 transition-all"><Plus size={18}/></button>
-              </div>
+               </div>
                 
                 <div className="space-y-2 mt-4 max-h-[150px] overflow-y-auto pr-2 scrollbar-hide">
-                    {receitaTemp.length === 0 ?
-                    <p className="text-xs text-zinc-600 italic">Nenhum ingrediente vinculado.</p> : receitaTemp.map((ing, idx) => (
+                    {receitaTemp.length === 0 ? <p className="text-xs text-zinc-600 italic">Nenhum ingrediente vinculado.</p> : receitaTemp.map((ing, idx) => (
                         <div key={idx} className="flex justify-between items-center bg-zinc-900 p-3 rounded-lg border border-zinc-800">
                             <span className="text-xs font-bold uppercase text-zinc-300">{ing.nome}</span>
-                             <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-4">
                                 <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/50">{ing.qtd} {ing.unidade}</Badge>
                                 <span className="text-[10px] text-zinc-500">Custo: R$ {ing.custo_calculado?.toFixed(2)}</span>
-                                 <button onClick={() => setReceitaTemp(receitaTemp.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
+                                  <button onClick={() => setReceitaTemp(receitaTemp.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
                             </div>
                         </div>
                     ))}
@@ -921,18 +1030,18 @@ export default function DashboardGlobal() {
 
       <Dialog open={modalNovoInsumo} onOpenChange={setModalNovoInsumo}>
         <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-10 shadow-2xl">
-             <DialogTitle className="text-3xl font-black text-yellow-500 uppercase italic tracking-tighter">{insumoEmEdicao ? "Editar Insumo" : "Novo Insumo no Estoque"}</DialogTitle>
+              <DialogTitle className="text-3xl font-black text-yellow-500 uppercase italic tracking-tighter">{insumoEmEdicao ? "Editar Insumo" : "Novo Insumo no Estoque"}</DialogTitle>
             <div className="space-y-6 mt-8">
                 <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Nome do Insumo (Ex: Vodka Smirnoff)</Label><Input value={novoInsumo.nome} onChange={e => setNovoInsumo({...novoInsumo, nome: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Formato de Compra</Label>
+                      <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Formato de Compra</Label>
                         <select value={novoInsumo.formato} onChange={e => setNovoInsumo({...novoInsumo, formato: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 h-14 rounded-xl px-4 text-zinc-200 font-bold outline-none">
                             <option value="unidade">Por Unidade (Ex: Cerveja, Limão)</option>
-                             <option value="garrafa_ml">Garrafa (Converte em ML)</option>
+                              <option value="garrafa_ml">Garrafa (Converte em ML)</option>
                             <option value="pacote_g">Pacote (Converte em Gramas)</option>
                             <option value="kg">Por Quilo (KG)</option>
-                         <option value="litro">Por Litro (L)</option>
+                          <option value="litro">Por Litro (L)</option>
                         </select>
                     </div>
                     <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Custo deste Formato (R$)</Label><Input placeholder="Preço do pacote/garrafa" value={novoInsumo.custo_formato} onChange={e => setNovoInsumo({...novoInsumo, custo_formato: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl text-yellow-500 font-black" /></div>
@@ -941,7 +1050,7 @@ export default function DashboardGlobal() {
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Quantidade Comprada</Label><Input placeholder="Ex: 5 garrafas, 10 pacotes" value={novoInsumo.qtd_comprada} onChange={e => setNovoInsumo({...novoInsumo, qtd_comprada: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
              
-                    {(novoInsumo.formato === 'garrafa_ml' || novoInsumo.formato === 'pacote_g') && (
+                     {(novoInsumo.formato === 'garrafa_ml' || novoInsumo.formato === 'pacote_g') && (
                         <div className="space-y-2 animate-in fade-in">
                             <Label className="text-yellow-500 font-black uppercase text-[10px]">{novoInsumo.formato === 'garrafa_ml' ? 'ML por Garrafa (Ex: 750)' : 'Gramas por Pacote (Ex: 500)'}</Label>
                             <Input placeholder={novoInsumo.formato === 'garrafa_ml' ? "750" : "500"} value={novoInsumo.rendimento} onChange={e => setNovoInsumo({...novoInsumo, rendimento: e.target.value})} className="bg-yellow-500/10 border-yellow-500/50 h-14 rounded-xl font-bold text-yellow-500" />
@@ -949,7 +1058,7 @@ export default function DashboardGlobal() {
                     )}
                 </div>
             </div>
-            <button onClick={salvarInsumo} className="w-full mt-10 bg-yellow-600 text-zinc-950 font-black py-5 rounded-[1.5rem] text-xl italic shadow-xl hover:bg-yellow-500 transition-all">{insumoEmEdicao ? "Salvar Alterações" : "Registrar no Estoque"}</button>
+             <button onClick={salvarInsumo} className="w-full mt-10 bg-yellow-600 text-zinc-950 font-black py-5 rounded-[1.5rem] text-xl italic shadow-xl hover:bg-yellow-500 transition-all">{insumoEmEdicao ? "Salvar Alterações" : "Registrar no Estoque"}</button>
         </DialogContent>
       </Dialog>
 
@@ -958,8 +1067,7 @@ export default function DashboardGlobal() {
             <DialogTitle className="text-3xl font-black text-red-500 uppercase italic tracking-tighter">{perdaEmEdicao ? "Editar Perda" : "Registrar Perda / Quebra"}</DialogTitle>
             <div className="space-y-6 mt-8">
                 <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Insumo Perdido</Label><select value={novaPerda.insumo_id} onChange={e => setNovaPerda({...novaPerda, insumo_id: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 h-14 rounded-xl px-4 text-zinc-200 font-bold outline-none"><option value="">Selecione o Insumo...</option>{insumosBase.map(i => <option key={i.id} value={i.id}>{i.nome} ({i.unidade})</option>)}</select></div>
-                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Quantidade Perdida ({insumosBase.find(i => i.id === novaPerda.insumo_id)?.unidade || 'UN / G / ML'})</Label><Input 
-                value={novaPerda.quantidade} onChange={e => setNovaPerda({...novaPerda, quantidade: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
+                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Quantidade Perdida ({insumosBase.find(i => i.id === novaPerda.insumo_id)?.unidade || 'UN / G / ML'})</Label><Input value={novaPerda.quantidade} onChange={e => setNovaPerda({...novaPerda, quantidade: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
             </div>
             <button onClick={registrarPerda} className="w-full mt-10 bg-red-600 text-zinc-50 font-black py-5 rounded-[1.5rem] text-xl italic shadow-xl hover:bg-red-500 transition-all">{perdaEmEdicao ? "Salvar Alterações" : "Confirmar Prejuízo"}</button>
         </DialogContent>
@@ -993,7 +1101,7 @@ export default function DashboardGlobal() {
           <SheetTitle className="text-4xl font-black text-yellow-500 italic uppercase">Mesa {mesaSelecionada?.numero}</SheetTitle>
           <p className="text-zinc-400 font-black uppercase text-xs mt-1 ml-1 opacity-70">Cliente: {mesaSelecionada?.cliente}</p>
         </div>
-        
+         
         {/* MESA PREVIEW DE ITENS CONSUMIDOS */}
         <div className="flex-1 overflow-y-auto p-8 space-y-3 bg-zinc-950/50">
           <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest block mb-4">Consumo da Mesa</Label>
@@ -1004,7 +1112,14 @@ export default function DashboardGlobal() {
                   <span className="text-lg font-black text-yellow-500 italic">x{item.quantidade}</span>
                   <span className="font-bold text-sm uppercase text-zinc-200">{item.nome}</span>
                 </div>
-                <span className="text-zinc-400 font-bold text-xs uppercase">R$ {(item.preco * item.quantidade).toFixed(2)}</span>
+                <div className="flex items-center gap-3">
+                    <span className="text-zinc-400 font-bold text-xs uppercase">R$ {(item.preco * item.quantidade).toFixed(2)}</span>
+                    {usuarioAtual?.role === 'gerente' && (
+                        <button onClick={() => estornarItemDaComanda(mesaSelecionada, idx, item)} className="text-zinc-600 hover:text-red-500 transition-colors" title="Estornar item da comanda">
+                            <Trash2 size={16}/>
+                        </button>
+                    )}
+                </div>
               </div>
             ))
           ) : (
@@ -1013,7 +1128,8 @@ export default function DashboardGlobal() {
         </div>
 
         <div className="p-8 border-t border-zinc-800 bg-zinc-900 shrink-0 space-y-3">
-          <button onClick={() => { setFichaMesaAberta(false); setTimeout(() => setMenuLateralAberto(true), 150); }} className="w-full bg-zinc-800 text-zinc-100 font-black py-5 rounded-[1.5rem] border border-zinc-700 uppercase tracking-widest text-xs transition-all hover:bg-zinc-700">Lançar Novo Item</button><button onClick={abrirCheckout} className="w-full bg-red-600 text-zinc-50 font-black py-5 rounded-[1.5rem] uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all">Fechar Conta</button>
+          <button onClick={() => { setFichaMesaAberta(false);
+            setTimeout(() => setMenuLateralAberto(true), 150); }} className="w-full bg-zinc-800 text-zinc-100 font-black py-5 rounded-[1.5rem] border border-zinc-700 uppercase tracking-widest text-xs transition-all hover:bg-zinc-700">Lançar Novo Item</button><button onClick={abrirCheckout} className="w-full bg-red-600 text-zinc-50 font-black py-5 rounded-[1.5rem] uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all">Fechar Conta</button>
         </div>
       </SheetContent></Sheet>
       
