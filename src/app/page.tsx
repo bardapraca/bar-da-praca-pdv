@@ -371,7 +371,14 @@ export default function DashboardGlobal() {
 
   // ================= LÓGICA DE FIADO =================
   const abrirGerenciadorFiado = (fiado: any) => {
-      setFiadoEmEdicao(fiado);
+      // Desmembra os itens para exibição individual (1 a 1) para permitir pagamento fracionado
+      const itensDesmembrados: any[] = [];
+      fiado.itens.forEach((item: any) => {
+          for (let i = 0; i < (item.quantidade || 1); i++) {
+              itensDesmembrados.push({ ...item, quantidade: 1 });
+          }
+      });
+      setFiadoEmEdicao({ ...fiado, itens: itensDesmembrados });
       setItensSelecionadosFiado([]);
       setModalGerenciarFiado(true);
   };
@@ -407,13 +414,24 @@ export default function DashboardGlobal() {
           const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalPago, custo_total: custoPago, lucro_total: lucroPago, cliente_nome: `Fiado Pago: ${fiadoEmEdicao.cliente_nome}`, mesa_numero: 0 }]);
           if (errVenda) throw errVenda;
 
+          // Reagrupa os itens restantes para não poluir o banco de dados
+          const itensRestantesAgrupados: any[] = [];
+          itensRestantes.forEach((item: any) => {
+              const existente = itensRestantesAgrupados.find(i => i.id === item.id);
+              if (existente) {
+                  existente.quantidade += 1;
+              } else {
+                  itensRestantesAgrupados.push({ ...item });
+              }
+          });
+
           // 2. Atualizar ou Apagar o Fiado
-          if (itensRestantes.length === 0) {
+          if (itensRestantesAgrupados.length === 0) {
               const { error: errDelete } = await supabase.from('fiados').delete().eq('id', fiadoEmEdicao.id);
               if (errDelete) throw errDelete;
           } else {
-              const novoTotal = itensRestantes.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
-              const { error: errUpdate } = await supabase.from('fiados').update({ itens: itensRestantes, total: novoTotal }).eq('id', fiadoEmEdicao.id);
+              const novoTotal = itensRestantesAgrupados.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
+              const { error: errUpdate } = await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', fiadoEmEdicao.id);
               if (errUpdate) throw errUpdate;
           }
 
