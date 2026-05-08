@@ -7,7 +7,7 @@ import {
   CheckCircle, ListOrdered, CreditCard, ChevronRight, 
   Banknote, QrCode, SmartphoneNfc, ChefHat, Clock, Check, GlassWater,
   PackageSearch, TrendingUp, AlertTriangle, Edit, BarChart3, BrainCircuit, 
-  DollarSign, Sparkles, Tag, Printer, Calendar as CalendarIcon, Filter, History, PlusCircle, User, Trash2, AlertOctagon, LogIn, Users, UserPlus
+  DollarSign, Sparkles, Tag, Printer, Calendar as CalendarIcon, Filter, History, PlusCircle, User, Trash2, AlertOctagon, LogIn, Users, UserPlus, BookOpen, CheckSquare
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -29,7 +29,7 @@ export default function DashboardGlobal() {
   const [regSenha, setRegSenha] = useState("");
 
   const [visaoAtiva, setVisaoAtiva] = useState<"salao" | "gestao" | "financeiro">("salao");
-  const [visaoGestao, setVisaoGestao] = useState<"cardapio" | "estoque" | "perdas" | "equipe">("cardapio");
+  const [visaoGestao, setVisaoGestao] = useState<"cardapio" | "estoque" | "perdas" | "equipe" | "fiados">("cardapio");
   const [periodoFiltro, setPeriodoFiltro] = useState<"dia" | "semana" | "mes" | "ano">("dia");
 
   // ================= ESTADOS OPERACIONAIS =================
@@ -57,6 +57,7 @@ export default function DashboardGlobal() {
   const [insumosBase, setInsumosBase] = useState<any[]>([]);
   const [perdasHistorico, setPerdasHistorico] = useState<any[]>([]);
   const [usuariosEquipe, setUsuariosEquipe] = useState<any[]>([]);
+  const [fiadosBase, setFiadosBase] = useState<any[]>([]);
 
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todas");
   const [buscaProduto, setBuscaProduto] = useState("");
@@ -80,6 +81,11 @@ export default function DashboardGlobal() {
   const [modalNovoUsuario, setModalNovoUsuario] = useState(false);
   const [novoMembro, setNovoMembro] = useState({ nome: "", email: "", senha: "", role: "colaborador" });
 
+  // ================= ESTADOS DO FIADO =================
+  const [modalGerenciarFiado, setModalGerenciarFiado] = useState(false);
+  const [fiadoEmEdicao, setFiadoEmEdicao] = useState<any>(null);
+  const [itensSelecionadosFiado, setItensSelecionadosFiado] = useState<number[]>([]);
+
   useEffect(() => { 
     if (usuarioAtual) {
         buscarProdutos(); 
@@ -87,6 +93,7 @@ export default function DashboardGlobal() {
         buscarVendas();
         buscarInsumos();
         buscarPerdas();
+        buscarFiados();
         if (usuarioAtual.role === 'gerente') buscarUsuarios();
     }
   }, [usuarioAtual]);
@@ -101,6 +108,8 @@ export default function DashboardGlobal() {
   if (data) setPerdasHistorico(data); };
   const buscarUsuarios = async () => { const { data } = await supabase.from('usuarios').select('*').order('nome');
   if (data) setUsuariosEquipe(data); };
+  const buscarFiados = async () => { const { data } = await supabase.from('fiados').select('*').order('data_criacao', { ascending: false });
+  if (data) setFiadosBase(data); };
 
   // ================= SISTEMA DE LOGIN REAL =================
   const efetuarLogin = async (e: React.FormEvent) => {
@@ -173,7 +182,6 @@ export default function DashboardGlobal() {
         const umaSemanaAtras = new Date();
         umaSemanaAtras.setDate(hoje.getDate() - 7);
         return d >= umaSemanaAtras;
-     
       }
       if (periodoFiltro === "mes") return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
       if (periodoFiltro === "ano") return d.getFullYear() === hoje.getFullYear();
@@ -191,7 +199,6 @@ export default function DashboardGlobal() {
         const umaSemanaAtras = new Date();
         umaSemanaAtras.setDate(hoje.getDate() - 7);
         return d >= umaSemanaAtras;
-     
       }
       if (periodoFiltro === "mes") return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
       if (periodoFiltro === "ano") return d.getFullYear() === hoje.getFullYear();
@@ -203,6 +210,7 @@ export default function DashboardGlobal() {
   const lucTotal = vendasFiltradas.reduce((acc, v) => acc + Number(v.lucro_total || 0), 0);
   const margem = fatTotal > 0 ? (lucTotal / fatTotal) * 100 : 0;
   const totalPerdasFin = perdasFiltradas.reduce((acc, p) => acc + Number(p.custo_perda || 0), 0);
+  const totalFiadosFin = fiadosBase.reduce((acc, f) => acc + Number(f.total || 0), 0);
   
   const dadosGrafico = useMemo(() => {
     return [...vendasFiltradas].reverse().map(v => ({
@@ -361,6 +369,62 @@ export default function DashboardGlobal() {
     } catch (err: any) { alert("ERRO (Produtos): " + (err.message || JSON.stringify(err))); }
   };
 
+  // ================= LÓGICA DE FIADO =================
+  const abrirGerenciadorFiado = (fiado: any) => {
+      setFiadoEmEdicao(fiado);
+      setItensSelecionadosFiado([]);
+      setModalGerenciarFiado(true);
+  };
+
+  const alternarItemFiado = (idx: number) => {
+      setItensSelecionadosFiado(prev => 
+          prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+      );
+  };
+
+  const selecionarTodosFiado = () => {
+      if (itensSelecionadosFiado.length === fiadoEmEdicao?.itens.length) {
+          setItensSelecionadosFiado([]);
+      } else {
+          setItensSelecionadosFiado(fiadoEmEdicao?.itens.map((_: any, idx: number) => idx) || []);
+      }
+  };
+
+  const receberPagamentoFiado = async () => {
+      if (!fiadoEmEdicao || itensSelecionadosFiado.length === 0) {
+          alert("Selecione pelo menos um item para receber pagamento.");
+          return;
+      }
+      try {
+          const itensParaPagar = fiadoEmEdicao.itens.filter((_: any, idx: number) => itensSelecionadosFiado.includes(idx));
+          const itensRestantes = fiadoEmEdicao.itens.filter((_: any, idx: number) => !itensSelecionadosFiado.includes(idx));
+          
+          const totalPago = itensParaPagar.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
+          const lucroPago = parseFloat((totalPago * 0.60).toFixed(2));
+          const custoPago = parseFloat((totalPago - lucroPago).toFixed(2));
+
+          // 1. Lançar o financeiro (Venda)
+          const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalPago, custo_total: custoPago, lucro_total: lucroPago, cliente_nome: `Fiado Pago: ${fiadoEmEdicao.cliente_nome}`, mesa_numero: 0 }]);
+          if (errVenda) throw errVenda;
+
+          // 2. Atualizar ou Apagar o Fiado
+          if (itensRestantes.length === 0) {
+              const { error: errDelete } = await supabase.from('fiados').delete().eq('id', fiadoEmEdicao.id);
+              if (errDelete) throw errDelete;
+          } else {
+              const novoTotal = itensRestantes.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
+              const { error: errUpdate } = await supabase.from('fiados').update({ itens: itensRestantes, total: novoTotal }).eq('id', fiadoEmEdicao.id);
+              if (errUpdate) throw errUpdate;
+          }
+
+          setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
+          buscarFiados(); buscarVendas();
+          alert("Pagamento de fiado recebido com sucesso!");
+      } catch (err) {
+          alert("Erro ao receber o fiado.");
+      }
+  };
+
   // ================= CHECKOUT, ENCERRAMENTO E EXCLUSÕES =================
   const handleSplitChange = (qtd: number) => {
     if (qtd < 1) return;
@@ -375,6 +439,34 @@ export default function DashboardGlobal() {
   };
   const abrirCheckout = () => { setFichaMesaAberta(false); handleSplitChange(1); setTimeout(() => setModalCheckoutAberto(true), 200); };
   
+  const finalizarComoFiado = async () => {
+    if (!mesaSelecionada) return;
+    
+    let nomeCliente = mesaSelecionada.cliente;
+    if (!nomeCliente || nomeCliente.toLowerCase() === 'consumidor' || nomeCliente.toLowerCase() === 'avulso') {
+        const inputNome = prompt("Digite o nome da pessoa para abrir o Fiado:");
+        if (!inputNome) return;
+        nomeCliente = inputNome;
+    }
+
+    try {
+        const totalFiado = parseFloat(Number(mesaSelecionada.total).toFixed(2));
+        
+        // 1. Cria o fiado no banco
+        const { error: errFiado } = await supabase.from('fiados').insert([{ cliente_nome: nomeCliente, total: totalFiado, itens: mesaSelecionada.itens }]);
+        if (errFiado) throw errFiado;
+
+        // 2. Apaga a mesa
+        const { error: errMesa } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
+        if (errMesa) throw errMesa;
+
+        setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarFiados();
+        alert(`Fiado criado com sucesso para ${nomeCliente}!`);
+    } catch (err: any) {
+        alert("Erro ao lançar conta como fiado.");
+    }
+  };
+
   const finalizarPagamentoMesa = async () => {
     if (!mesaSelecionada) return;
     const totalVenda = parseFloat(Number(mesaSelecionada.total).toFixed(2));
@@ -386,7 +478,6 @@ export default function DashboardGlobal() {
         const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalVenda, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: nomeCliente, mesa_numero: mesaNum }]);
         if (errVenda) throw errVenda;
 
-        // AQUI: Deleta a mesa para ela sumir da tela em vez de apenas limpar os itens
         const { error: errMesa } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         if (errMesa) throw errMesa;
         
@@ -403,7 +494,6 @@ export default function DashboardGlobal() {
     }
     if (confirm(`ATENÇÃO: Deseja realmente excluir a Mesa ${mesa.numero}? \n\nTodos os pedidos serão apagados, o valor NÃO será contabilizado no financeiro e os insumos voltarão automaticamente ao estoque.`)) {
       try {
-        // 1. Estornar estoque dos itens que já estavam na mesa
         if (mesa.itens && mesa.itens.length > 0) {
           for (const item of mesa.itens) {
             const p = produtosBase.find(pb => pb.id === item.id);
@@ -412,14 +502,13 @@ export default function DashboardGlobal() {
                 const insumo = insumosBase.find(i => i.id === ing.insumo_id);
                 if (insumo) {
                   let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
-                  const novoEstoque = insumo.estoque + qtdUsada; // DEVOLVE AO ESTOQUE
+                  const novoEstoque = insumo.estoque + qtdUsada; 
                   await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
                 }
               }
             }
           }
         }
-        // 2. Excluir a mesa
         const { error } = await supabase.from('mesas').delete().eq('id', mesa.id);
         if (error) throw error;
 
@@ -439,7 +528,6 @@ export default function DashboardGlobal() {
     }
     if (confirm(`Deseja remover "${item.quantidade}x ${item.nome}" da comanda? \n\nO valor será descontado da mesa e o estoque será devolvido.`)) {
       try {
-        // 1. Estornar estoque
         const p = produtosBase.find(pb => pb.id === item.id);
         if (p && p.receita && Array.isArray(p.receita)) {
           for (const ing of p.receita) {
@@ -452,7 +540,6 @@ export default function DashboardGlobal() {
           }
         }
 
-        // 2. Atualizar a mesa no banco
         const novosItens = [...mesa.itens];
         novosItens.splice(indexItem, 1); 
         const valorDescontado = item.preco * item.quantidade;
@@ -689,11 +776,12 @@ export default function DashboardGlobal() {
                 <button onClick={() => window.print()} className="bg-yellow-500 text-zinc-950 px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-2 hover:bg-yellow-400 transition-all shadow-lg"><Printer size={16} /> Relatório PDF</button>
              </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800 shadow-xl print:border-zinc-300"><p className="text-zinc-500 text-[10px] font-black uppercase mb-1">Faturamento</p><p className="text-3xl font-black text-white italic print:text-black">R$ {fatTotal.toFixed(2)}</p></div>
             <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800 shadow-xl print:border-zinc-300"><p className="text-zinc-500 text-[10px] font-black uppercase mb-1">Lucro Estimado</p><p className="text-3xl font-black text-green-500 italic">R$ {lucTotal.toFixed(2)}</p></div>
              <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800 shadow-xl print:border-zinc-300"><p className="text-zinc-500 text-[10px] font-black uppercase mb-1">Margem Real</p><p className="text-3xl font-black text-yellow-500 italic">{margem.toFixed(1)}%</p></div>
             <div className="bg-red-950/20 p-6 rounded-[2rem] border border-red-900/30 shadow-xl print:border-zinc-300 print:bg-white"><p className="text-red-500 text-[10px] font-black uppercase mb-1">Desperdício / Perdas</p><p className="text-3xl font-black text-red-500 italic">R$ {totalPerdasFin.toFixed(2)}</p></div>
+            <div className="bg-orange-950/20 p-6 rounded-[2rem] border border-orange-900/30 shadow-xl print:border-zinc-300 print:bg-white"><p className="text-orange-500 text-[10px] font-black uppercase mb-1">Fiados na Praça</p><p className="text-3xl font-black text-orange-500 italic">R$ {totalFiadosFin.toFixed(2)}</p></div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
@@ -734,8 +822,37 @@ export default function DashboardGlobal() {
               <button onClick={() => setVisaoGestao("cardapio")} className={`px-6 py-3 rounded-xl font-black uppercase text-xs transition-all ${visaoGestao === "cardapio" ? "bg-yellow-500 text-zinc-950 shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}>Cardápio</button>
               <button onClick={() => setVisaoGestao("estoque")} className={`px-6 py-3 rounded-xl font-black uppercase text-xs transition-all ${visaoGestao === "estoque" ? "bg-yellow-500 text-zinc-950 shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}>Estoque Real</button>
               <button onClick={() => setVisaoGestao("perdas")} className={`px-6 py-3 rounded-xl font-black uppercase text-xs transition-all ${visaoGestao === "perdas" ? "bg-red-500 text-zinc-950 shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}>Registrar Perdas</button>
+              <button onClick={() => setVisaoGestao("fiados")} className={`px-6 py-3 rounded-xl font-black uppercase text-xs transition-all ${visaoGestao === "fiados" ? "bg-orange-500 text-zinc-950 shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}><BookOpen size={14} className="inline mr-1"/> Fiados</button>
               <button onClick={() => setVisaoGestao("equipe")} className={`px-6 py-3 rounded-xl font-black uppercase text-xs transition-all ${visaoGestao === "equipe" ? "bg-blue-500 text-zinc-950 shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}><Users size={14} className="inline mr-1"/> Equipe / Acessos</button>
           </div>
+
+          {/* SUB-ABA FIADOS */}
+          {visaoGestao === "fiados" && (
+            <div className="animate-in fade-in">
+              <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black uppercase italic tracking-tighter text-orange-500">Caderneta de Fiados</h2></div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl">
+                  <table className="w-full text-left font-bold text-sm">
+                      <thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
+                          <tr><th className="p-6">Cliente (Devedor)</th><th className="p-6">Data de Abertura</th><th className="p-6 text-orange-500">Valor Pendente</th><th className="p-6 text-center">Ações</th></tr>
+                      </thead>
+                      <tbody>
+                          {fiadosBase.length === 0 ? (
+                              <tr><td colSpan={4} className="p-6 text-center text-zinc-500 italic uppercase font-black">Nenhum fiado pendente na praça.</td></tr>
+                          ) : (
+                              fiadosBase.map(f => (
+                                  <tr key={f.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors">
+                                      <td className="p-6 font-black uppercase text-zinc-200">{f.cliente_nome}</td>
+                                      <td className="p-6 text-zinc-500 text-xs">{new Date(f.data_criacao).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                                      <td className="p-6 text-orange-500 font-black italic text-lg">R$ {Number(f.total).toFixed(2)}</td>
+                                      <td className="p-6 text-center"><button onClick={() => abrirGerenciadorFiado(f)} className="bg-orange-600/20 text-orange-500 border border-orange-500/50 px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-orange-500 hover:text-white transition-all">Receber Pagamento</button></td>
+                                  </tr>
+                              ))
+                          )}
+                      </tbody>
+                  </table>
+               </div>
+            </div>
+          )}
 
           {/* SUB-ABA CARDÁPIO */}
           {visaoGestao === "cardapio" && (
@@ -950,9 +1067,60 @@ export default function DashboardGlobal() {
                 </div>
               ))}
             </div>
-            <button onClick={finalizarPagamentoMesa} className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-6 rounded-[1.5rem] text-xl shadow-[0_10px_40px_rgba(22,163,74,0.3)] uppercase italic tracking-tighter active:scale-95 transition-all">Encerrar Mesa</button>
+            
+            <div className="grid grid-cols-2 gap-4">
+               <button onClick={finalizarComoFiado} className="w-full bg-orange-600 hover:bg-orange-500 text-white font-black py-6 rounded-[1.5rem] text-xl shadow-[0_10px_40px_rgba(234,88,12,0.3)] uppercase italic tracking-tighter active:scale-95 transition-all">Lançar Fiado</button>
+               <button onClick={finalizarPagamentoMesa} className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-6 rounded-[1.5rem] text-xl shadow-[0_10px_40px_rgba(22,163,74,0.3)] uppercase italic tracking-tighter active:scale-95 transition-all">Encerrar Pago</button>
+            </div>
           </div>
         </DialogContent>
+      </Dialog>
+
+      {/* GERENCIAR FIADO (MODAL NOVO) */}
+      <Dialog open={modalGerenciarFiado} onOpenChange={setModalGerenciarFiado}>
+          <DialogContent className="sm:max-w-[500px] bg-zinc-950 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-10 shadow-2xl">
+              <DialogTitle className="text-3xl font-black uppercase text-center italic tracking-tighter text-orange-500">Receber Fiado</DialogTitle>
+              <div className="text-center mt-2">
+                  <Badge className="bg-orange-500 text-zinc-950 font-black uppercase italic tracking-widest">{fiadoEmEdicao?.cliente_nome}</Badge>
+              </div>
+
+              <div className="mt-8 space-y-6">
+                  <div className="flex justify-between items-center mb-2">
+                      <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest">Itens Pendentes</Label>
+                      <button onClick={selecionarTodosFiado} className="text-[10px] text-orange-500 font-black uppercase hover:text-orange-400">
+                          {itensSelecionadosFiado.length === fiadoEmEdicao?.itens.length ? "Desmarcar Tudo" : "Marcar Tudo"}
+                      </button>
+                  </div>
+                  
+                  <div className="bg-zinc-900/50 rounded-2xl border border-zinc-800 p-2 max-h-[250px] overflow-y-auto space-y-2 scrollbar-hide">
+                      {fiadoEmEdicao?.itens?.map((item: any, idx: number) => {
+                          const isSelected = itensSelecionadosFiado.includes(idx);
+                          return (
+                              <div key={idx} onClick={() => alternarItemFiado(idx)} className={`flex items-center gap-4 p-3 rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-orange-500/10 border-orange-500/50' : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'}`}>
+                                  <div className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 border ${isSelected ? 'bg-orange-500 border-orange-500 text-zinc-950' : 'bg-zinc-900 border-zinc-700'}`}>
+                                      {isSelected && <CheckSquare size={14} />}
+                                  </div>
+                                  <div className="flex-1">
+                                      <p className="text-xs font-bold text-zinc-200 uppercase">{item.quantidade}x {item.nome}</p>
+                                  </div>
+                                  <span className="text-orange-500 font-black italic">R$ {(item.preco * item.quantidade).toFixed(2)}</span>
+                              </div>
+                          );
+                      })}
+                  </div>
+
+                  <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 text-center">
+                      <Label className="text-zinc-500 font-black uppercase text-[10px] mb-2 block tracking-widest">Valor Selecionado Para Receber</Label>
+                      <p className="text-4xl font-black italic text-white">
+                          R$ {fiadoEmEdicao?.itens.filter((_: any, i: number) => itensSelecionadosFiado.includes(i)).reduce((acc: number, item: any) => acc + (item.preco * item.quantidade), 0).toFixed(2) || "0.00"}
+                      </p>
+                  </div>
+
+                  <button onClick={receberPagamentoFiado} className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-6 rounded-[1.5rem] text-xl shadow-[0_10px_40px_rgba(22,163,74,0.3)] uppercase italic tracking-tighter active:scale-95 transition-all">
+                      Confirmar Pagamento
+                  </button>
+              </div>
+          </DialogContent>
       </Dialog>
 
       {/* CADASTRO DE NOVO USUÁRIO DA EQUIPE */}
