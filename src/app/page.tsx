@@ -444,24 +444,59 @@ export default function DashboardGlobal() {
     
     let nomeCliente = mesaSelecionada.cliente;
     if (!nomeCliente || nomeCliente.toLowerCase() === 'consumidor' || nomeCliente.toLowerCase() === 'avulso') {
-        const inputNome = prompt("Digite o nome da pessoa para abrir o Fiado:");
+        const inputNome = prompt("Digite o nome da pessoa para abrir ou adicionar ao Fiado:");
         if (!inputNome) return;
-        nomeCliente = inputNome;
+        nomeCliente = inputNome.trim().toUpperCase();
+    } else {
+        nomeCliente = nomeCliente.trim().toUpperCase();
     }
 
     try {
-        const totalFiado = parseFloat(Number(mesaSelecionada.total).toFixed(2));
+        const totalFiadoAtual = parseFloat(Number(mesaSelecionada.total).toFixed(2));
         
-        // 1. Cria o fiado no banco
-        const { error: errFiado } = await supabase.from('fiados').insert([{ cliente_nome: nomeCliente, total: totalFiado, itens: mesaSelecionada.itens }]);
-        if (errFiado) throw errFiado;
+        // 1. Verifica se já existe um fiado para esse cliente (ignorando maiúsculas/minúsculas)
+        const { data: fiadoExistente, error: errBusca } = await supabase
+            .from('fiados')
+            .select('*')
+            .ilike('cliente_nome', nomeCliente)
+            .maybeSingle();
+
+        if (errBusca) throw errBusca;
+
+        if (fiadoExistente) {
+            // Cliente já tem conta! Vamos mesclar os itens e somar o valor
+            const novoTotal = parseFloat(Number(fiadoExistente.total + totalFiadoAtual).toFixed(2));
+            let itensMesclados = [...fiadoExistente.itens];
+
+            mesaSelecionada.itens.forEach((itemNovo: any) => {
+                const index = itensMesclados.findIndex((i: any) => i.id === itemNovo.id);
+                if (index >= 0) { 
+                    itensMesclados[index].quantidade += itemNovo.quantidade; 
+                } else { 
+                    itensMesclados.push({ ...itemNovo }); 
+                }
+            });
+
+            const { error: errUpdate } = await supabase
+                .from('fiados')
+                .update({ total: novoTotal, itens: itensMesclados })
+                .eq('id', fiadoExistente.id);
+            if (errUpdate) throw errUpdate;
+
+        } else {
+            // Cliente não tem conta, cria um registro novo
+            const { error: errInsert } = await supabase
+                .from('fiados')
+                .insert([{ cliente_nome: nomeCliente, total: totalFiadoAtual, itens: mesaSelecionada.itens }]);
+            if (errInsert) throw errInsert;
+        }
 
         // 2. Apaga a mesa
         const { error: errMesa } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         if (errMesa) throw errMesa;
 
         setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarFiados();
-        alert(`Fiado criado com sucesso para ${nomeCliente}!`);
+        alert(`Fiado salvo com sucesso na conta de ${nomeCliente}!`);
     } catch (err: any) {
         alert("Erro ao lançar conta como fiado.");
     }
