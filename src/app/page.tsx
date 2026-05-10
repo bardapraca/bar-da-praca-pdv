@@ -111,33 +111,74 @@ export default function DashboardGlobal() {
   const buscarFiados = async () => { const { data } = await supabase.from('fiados').select('*').order('data_criacao', { ascending: false });
   if (data) setFiadosBase(data); };
 
-  // ================= SISTEMA DE LOGIN REAL =================
+  // ================= SISTEMA DE LOGIN REAL E SEGURO (GOTRUE) =================
   const efetuarLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginUsuario || !loginSenha) return alert("Preencha email e senha.");
     try {
-        const { data, error } = await supabase.from('usuarios').select('*').eq('email', loginUsuario).eq('senha', loginSenha).single();
-        if (error || !data) { alert("Email ou senha incorretos."); return;
+        // 1. Autenticação nativa e segura via Supabase Auth (GoTrue)
+        // O password viaja no body do POST (fecha V-03) e gera um token JWT assinado (fecha V-04)
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: loginUsuario,
+            password: loginSenha
+        });
+
+        if (authError || !authData.user) { 
+            alert("Email ou senha incorretos."); 
+            return;
         }
-        setUsuarioAtual({ id: data.id, nome: data.nome, role: data.role });
+        
+        // 2. Com o token JWT seguro propagado automaticamente, busca o perfil na tabela usuarios
+        const { data: perfilData, error: perfilError } = await supabase
+            .from('usuarios')
+            .select('*')
+            .eq('email', loginUsuario)
+            .single();
+            
+        if (perfilError || !perfilData) { 
+            alert("Perfil de acesso não encontrado."); 
+            return; 
+        }
+
+        setUsuarioAtual({ id: perfilData.id, nome: perfilData.nome, role: perfilData.role });
         setVisaoAtiva("salao");
-    } catch (err) { alert("Erro de conexão ao fazer login."); }
+    } catch (err) { 
+        alert("Erro de conexão ao fazer login."); 
+    }
   };
+
   const registrarGerente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regNome || !regEmail || !regSenha) return alert("Preencha todos os campos.");
     try {
-        const { error } = await supabase.from('usuarios').insert([{ nome: regNome, email: regEmail, senha: regSenha, role: "gerente" }]);
+        // 1. Registra a credencial com hash seguro nativo (bcrypt) no Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: regEmail,
+            password: regSenha
+        });
+        if (authError) throw authError;
+
+        // 2. Salva apenas os dados públicos do perfil na tabela usuarios (sem a coluna senha!)
+        const { error } = await supabase.from('usuarios').insert([{ 
+            nome: regNome, 
+            email: regEmail, 
+            role: "gerente" 
+        }]);
         if (error) throw error;
+
         alert("Gerente cadastrado com sucesso! Agora faça o login.");
         setIsRegistering(false);
     } catch (err: any) { 
-        alert("ERRO DO BANCO DE DADOS: " + (err.message || err.details || JSON.stringify(err)));
+        alert("ERRO AO CADASTRAR: " + (err.message || JSON.stringify(err)));
     }
   };
 
-  const efetuarLogout = () => {
-    setUsuarioAtual(null); setLoginUsuario(""); setLoginSenha(""); setVisaoAtiva("salao");
+  const efetuarLogout = async () => {
+    await supabase.auth.signOut(); // Destrói os tokens criptográficos da sessão atual
+    setUsuarioAtual(null); 
+    setLoginUsuario(""); 
+    setLoginSenha(""); 
+    setVisaoAtiva("salao");
   };
 
   // ================= FUNÇÃO DE ALERTA SONORO =================
@@ -324,11 +365,26 @@ export default function DashboardGlobal() {
   const salvarNovoUsuario = async () => {
     if (!novoMembro.nome || !novoMembro.email || !novoMembro.senha) return alert("Preencha todos os campos.");
     try {
-        const { error } = await supabase.from('usuarios').insert([{ nome: novoMembro.nome, email: novoMembro.email, senha: novoMembro.senha, role: novoMembro.role }]);
+        // 1. Cria a credencial segura nativamente no Supabase Auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: novoMembro.email,
+            password: novoMembro.senha
+        });
+        if (authError) throw authError;
+
+        // 2. Salva o perfil na tabela usuarios sem expor a senha
+        const { error } = await supabase.from('usuarios').insert([{ 
+            nome: novoMembro.nome, 
+            email: novoMembro.email, 
+            role: novoMembro.role 
+        }]);
         if (error) throw error;
-        setModalNovoUsuario(false); setNovoMembro({ nome: "", email: "", senha: "", role: "colaborador" }); buscarUsuarios();
+
+        setModalNovoUsuario(false); 
+        setNovoMembro({ nome: "", email: "", senha: "", role: "colaborador" }); 
+        buscarUsuarios();
     } catch (err: any) { 
-        alert("ERRO DO BANCO DE DADOS: " + (err.message || err.details || JSON.stringify(err)));
+        alert("ERRO AO CADASTRAR: " + (err.message || JSON.stringify(err)));
     }
   };
 
