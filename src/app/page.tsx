@@ -756,7 +756,7 @@ export default function DashboardGlobal() {
           setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
           buscarFiados(); buscarVendas();
           alert("Pagamento de fiado recebido com sucesso!");
-      } catch (err: any) {
+      } catch (err) {
           alert("Erro ao receber o fiado.");
       }
   };
@@ -801,7 +801,7 @@ export default function DashboardGlobal() {
     setTimeout(() => setModalCheckoutAberto(true), 200); 
   };
   
-  // Função inteligente que recebe tanto o novo nome string quanto a mesclagem com comandas ativas
+  // Função inteligente blindada com conversão rigorosa String(...) contra qualquer formato de ID
   const confirmarAdicaoOuFusaoPessoa = async () => {
     if (!mesaSelecionada) return;
 
@@ -838,10 +838,10 @@ export default function DashboardGlobal() {
         } catch (err: any) { alert("Erro ao adicionar pessoa à mesa."); }
 
     } else {
-        const idMesaMesclar = parseInt(selecaoMesaMesclar);
-        if (!idMesaMesclar) return alert("Selecione uma mesa ativa para mesclar.");
+        if (!selecaoMesaMesclar) return alert("Selecione uma mesa ativa para mesclar.");
         
-        const mesaOrigem = mesasReais.find((m: any) => m.id === idMesaMesclar);
+        // CORREÇÃO CRÍTICA: String(...) elimina a falha de parseInt em UUIDs/Textos instantaneamente
+        const mesaOrigem = mesasReais.find((m: any) => String(m.id) === String(selecaoMesaMesclar));
         if (!mesaOrigem) return alert("Mesa de origem não localizada.");
 
         const identificadorOrigem = typeof mesaOrigem.numero === 'number' && mesaOrigem.numero >= 1000 
@@ -879,7 +879,7 @@ export default function DashboardGlobal() {
             registrarAcaoOffline({
                 tipo: 'MESCLAR_MESAS',
                 payload: { idDestino: mesaSelecionada.id, itensMesclados, totalMesclado, clienteMescladoStr, idOrigem: mesaOrigem.id },
-                descricao: `Fusão da ${identificadorOrigem} na Mesa ${mesaSelecionada.numero}`
+                descricao: `Fusão da ${identificadorOrigem} na Comanda ${mesaSelecionada.numero >= 1000 ? 'Avulsa' : mesaSelecionada.numero}`
             });
             alert(`Comanda unida localmente com absoluta separação de itens!`);
             return;
@@ -1609,7 +1609,7 @@ export default function DashboardGlobal() {
         </div>
       </header>
 
-      {/* FINANCEIRO CONSOLIDADO (UNIFICADO COM PERDAS VERMELHAS E MODAIS CIRÚRGICOS) */}
+      {/* FINANCEIRO CONSOLIDADO */}
       {visaoAtiva === "financeiro" && usuarioAtual?.role === 'gerente' && (
         <main className="p-6 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-800 print:border-none print:p-0 print:bg-transparent">
@@ -1899,7 +1899,7 @@ export default function DashboardGlobal() {
                 </div>
                 <p className={`text-sm font-black tracking-widest uppercase ${m.status === 'livre' ? 'text-zinc-600' : 'text-yellow-500'}`}>{m.status === 'livre' ? 'Livre' : `R$ ${Number(m.total).toFixed(2).replace('.', ',')}`}</p>
               </div>
-            )})};
+            )})}
           </div>
         </main>
       )}
