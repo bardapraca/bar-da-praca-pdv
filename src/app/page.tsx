@@ -17,7 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
 
-// Helper analítico para extrair todas as pessoas distintas de uma mesa
+// Helper analítico para extrair todas as pessoas distintas de uma mesa ocupada
 const getPessoasDaMesa = (mesa: any): string[] => {
   if (!mesa) return ["Consumidor"];
   const nomesStr = mesa.cliente || "Consumidor";
@@ -69,13 +69,19 @@ export default function DashboardGlobal() {
   const [pessoaAtivaMesa, setPessoaAtivaMesa] = useState<string>("Todos");
   const [modoFechamentoCheckout, setModoFechamentoCheckout] = useState<string>("Todos");
 
-  // ================= ESTADOS DE EDIÇÃO DE MESA ABERTA =================
+  // ================= ESTADOS DE EDIÇÃO E FUSÃO DE MESA ABERTA =================
   const [modalEditarMesa, setModalEditarMesa] = useState(false);
   const [editMesaNum, setEditMesaNum] = useState("");
   const [editMesaCliente, setEditMesaCliente] = useState("");
 
-  // ================= ESTADOS DE DETALHE DE COMANDA FECHADA =================
-  const [vendaDetalhe, setVendaDetalhe] = useState<any>(null);
+  // Novo modal inteligente acionado pelo botão "+ Pessoa"
+  const [modalAdicionarPessoa, setModalAdicionarPessoa] = useState(false);
+  const [tipoAdicaoPessoa, setTipoAdicaoPessoa] = useState<"nova" | "mesclar">("nova");
+  const [inputNovoNomePessoa, setInputNovoNomePessoa] = useState("");
+  const [selecaoMesaMesclar, setSelecaoMesaMesclar] = useState("");
+
+  // ================= ESTADOS DE DETALHE DE REGISTROS FECHADOS =================
+  const [itemDetalheFinanceiro, setItemDetalheFinanceiro] = useState<any>(null);
 
   // ================= ESTADOS DE PREPARO / COZINHA (KDS) =================
   const [pedidosPendentes, setPedidosPendentes] = useState<any[]>([]);
@@ -146,7 +152,7 @@ export default function DashboardGlobal() {
     window.addEventListener('offline', checkStatus);
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW reg erro', err));
+      navigator.serviceWorker.register('/sw.js').catch((err: any) => console.log('SW reg erro', err));
     }
 
     return () => {
@@ -188,7 +194,7 @@ export default function DashboardGlobal() {
                 await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('numero', mesaNumero);
                 
                 for (const item of pedidoAtual) {
-                    const p = produtosBase.find(pb => pb.id === item.id);
+                    const p = produtosBase.find((pb: any) => pb.id === item.id);
                     if (p && p.receita && Array.isArray(p.receita)) {
                         for (const ing of p.receita) {
                             const { data: insumo } = await supabase.from('insumos').select('*').eq('id', ing.insumo_id).maybeSingle();
@@ -260,9 +266,14 @@ export default function DashboardGlobal() {
                     await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', targetId);
                 }
             }
+            else if (acao.tipo === 'MESCLAR_MESAS') {
+                const { idDestino, itensMesclados, totalMesclado, clienteMescladoStr, idOrigem } = acao.payload;
+                await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', idDestino);
+                await supabase.from('mesas').delete().eq('id', idOrigem);
+            }
 
             sucessoCount++;
-        } catch (err) {
+        } catch (err: any) {
             console.error("Erro na sincronização:", acao, err);
         }
     }
@@ -321,7 +332,7 @@ export default function DashboardGlobal() {
 
         setUsuarioAtual({ id: perfilData.id, nome: perfilData.nome, role: perfilData.role });
         setVisaoAtiva("salao");
-    } catch (err) { 
+    } catch (err: any) { 
         alert("Erro de conexão ao fazer login."); 
     }
   };
@@ -392,7 +403,7 @@ export default function DashboardGlobal() {
   
   const vendasFiltradas = useMemo(() => {
     const hoje = new Date();
-    return historicoVendas.filter(v => {
+    return historicoVendas.filter((v: any) => {
       if (!v.data_venda) return false;
       const d = new Date(v.data_venda);
       if (periodoFiltro === "dia") return d.toDateString() === hoje.toDateString();
@@ -415,7 +426,7 @@ export default function DashboardGlobal() {
   
   const perdasFiltradas = useMemo(() => {
     const hoje = new Date();
-    return perdasHistorico.filter(p => {
+    return perdasHistorico.filter((p: any) => {
       if (!p.data_perda) return false;
       const d = new Date(p.data_perda);
       if (periodoFiltro === "dia") return d.toDateString() === hoje.toDateString();
@@ -436,15 +447,15 @@ export default function DashboardGlobal() {
     });
   }, [perdasHistorico, periodoFiltro, dataInicio, dataFim]);
   
-  const fatTotal = vendasFiltradas.reduce((acc, v) => acc + Number(v.total_venda || 0), 0);
-  const lucTotal = vendasFiltradas.reduce((acc, v) => acc + Number(v.lucro_total || 0), 0);
+  const fatTotal = vendasFiltradas.reduce((acc: number, v: any) => acc + Number(v.total_venda || 0), 0);
+  const lucTotal = vendasFiltradas.reduce((acc: number, v: any) => acc + Number(v.lucro_total || 0), 0);
   const margem = fatTotal > 0 ? (lucTotal / fatTotal) * 100 : 0;
-  const totalPerdasFin = perdasFiltradas.reduce((acc, p) => acc + Number(p.custo_perda || 0), 0);
-  const totalFiadosFin = fiadosBase.reduce((acc, f) => acc + Number(f.total || 0), 0);
+  const totalPerdasFin = perdasFiltradas.reduce((acc: number, p: any) => acc + Number(p.custo_perda || 0), 0);
+  const totalFiadosFin = fiadosBase.reduce((acc: number, f: any) => acc + Number(f.total || 0), 0);
   
   const dadosGrafico = useMemo(() => {
     const eventos: any[] = [];
-    vendasFiltradas.forEach(v => {
+    vendasFiltradas.forEach((v: any) => {
         if (v.data_venda) {
             eventos.push({
                 ts: new Date(v.data_venda).getTime(),
@@ -454,7 +465,7 @@ export default function DashboardGlobal() {
             });
         }
     });
-    perdasFiltradas.forEach(p => {
+    perdasFiltradas.forEach((p: any) => {
         if (p.data_perda) {
             eventos.push({
                 ts: new Date(p.data_perda).getTime(),
@@ -465,9 +476,9 @@ export default function DashboardGlobal() {
         }
     });
     
-    eventos.sort((a, b) => a.ts - b.ts);
+    eventos.sort((a: any, b: any) => a.ts - b.ts);
     
-    return eventos.map(ev => {
+    return eventos.map((ev: any) => {
         const label = (periodoFiltro === 'dia' || (periodoFiltro === 'custom' && dataInicio === dataFim))
             ? ev.dataRaw.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
             : ev.dataRaw.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -479,23 +490,28 @@ export default function DashboardGlobal() {
     });
   }, [vendasFiltradas, perdasFiltradas, periodoFiltro, dataInicio, dataFim]);
   
-  const historicoAgrupado = useMemo(() => {
-    if (periodoFiltro === "dia" || periodoFiltro === "custom") return vendasFiltradas.map(v => ({ ...v, isConsolidated: false }));
-    const map = new Map();
-    vendasFiltradas.forEach(v => {
+  // UNIFICAÇÃO GARANTIDA: Intercala comandas fechadas e perdas na mesma linha do tempo
+  const historicoConsolidadoUnificado = useMemo(() => {
+    if (periodoFiltro === "dia" || periodoFiltro === "custom") {
+        const arrVendas = vendasFiltradas.map((v: any) => ({ ...v, typeObj: 'venda', isConsolidated: false, ts: new Date(v.data_venda).getTime() }));
+        const arrPerdas = perdasFiltradas.map((p: any) => ({ ...p, typeObj: 'perda', isConsolidated: false, ts: new Date(p.data_perda).getTime() }));
+        return [...arrVendas, ...arrPerdas].sort((a: any, b: any) => b.ts - a.ts);
+    }
+    const mapConsolidado = new Map();
+    vendasFiltradas.forEach((v: any) => {
         const d = new Date(v.data_venda);
         let key = "";
         if (periodoFiltro === "semana") key = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
         else if (periodoFiltro === "mes") key = `Semana ${Math.ceil(d.getDate() / 7)} - ${d.toLocaleString('pt-BR', { month: 'short' })}`;
         else if (periodoFiltro === "ano") key = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
         key = key.charAt(0).toUpperCase() + key.slice(1);
-        if (!map.has(key)) map.set(key, { key, total: 0, count: 0, isConsolidated: true });
-        const entry = map.get(key);
+        if (!mapConsolidado.has(key)) mapConsolidado.set(key, { key, total: 0, count: 0, isConsolidated: true });
+        const entry = mapConsolidado.get(key);
         entry.total += Number(v.total_venda);
         entry.count += 1;
     });
-    return Array.from(map.values());
-  }, [vendasFiltradas, periodoFiltro]);
+    return Array.from(mapConsolidado.values());
+  }, [vendasFiltradas, perdasFiltradas, periodoFiltro]);
 
   // ================= ESTOQUE INTELIGENTE =================
   const abrirParaEdicaoInsumo = (i: any) => {
@@ -503,6 +519,7 @@ export default function DashboardGlobal() {
     setNovoInsumo({ nome: i.nome, formato: "unidade", custo_formato: i.custo_unidade.toString(), qtd_comprada: i.estoque.toString(), rendimento: "1" });
     setModalNovoInsumo(true);
   };
+
   const salvarInsumo = async () => {
     try {
         const formato = novoInsumo.formato;
@@ -527,7 +544,7 @@ export default function DashboardGlobal() {
         } 
 
         if (insumoEmEdicao) {
-            const insumoOriginal = insumosBase.find(ins => ins.id === insumoEmEdicao);
+            const insumoOriginal = insumosBase.find((ins: any) => ins.id === insumoEmEdicao);
             if (formato === "unidade" && insumoOriginal) unidadeFinal = insumoOriginal.unidade;
             const { error } = await supabase.from('insumos').update({ nome: novoInsumo.nome, unidade: unidadeFinal, estoque: estoqueFinal, custo_unidade: custoUnidadeFinal }).eq('id', insumoEmEdicao);
             if (error) throw error;
@@ -547,7 +564,7 @@ export default function DashboardGlobal() {
 
   const registrarPerda = async () => {
     try {
-        const insumo = insumosBase.find(i => i.id === novaPerda.insumo_id);
+        const insumo = insumosBase.find((i: any) => i.id === novaPerda.insumo_id);
         if (!insumo) return;
         let qtdPerdida = parseFloat(String(novaPerda.quantidade).replace(',', '.'));
         if (isNaN(qtdPerdida)) return;
@@ -618,7 +635,7 @@ export default function DashboardGlobal() {
     setNovoProd({ nome: p.nome, categoria: p.categoria || "Bebidas", preco: p.preco?.toString() || "" }); setReceitaTemp(p.receita || []); setModalNovoProduto(true); };
   
   const adicionarIngrediente = () => {
-    const insumo = insumosBase.find(i => i.id === ingredienteTemp.insumo_id);
+    const insumo = insumosBase.find((i: any) => i.id === ingredienteTemp.insumo_id);
     if(insumo && ingredienteTemp.qtd) {
         let qtdConvertida = parseFloat(String(ingredienteTemp.qtd).replace(',','.'));
         let custoIngrediente = qtdConvertida * insumo.custo_unidade;
@@ -629,7 +646,7 @@ export default function DashboardGlobal() {
 
   const salvarProduto = async () => {
     try {
-        const custoCalculado = receitaTemp.reduce((acc, ing) => acc + (ing.custo_calculado || 0), 0);
+        const custoCalculado = receitaTemp.reduce((acc: number, ing: any) => acc + (ing.custo_calculado || 0), 0);
         const precoParsed = parseFloat(String(novoProd.preco).replace(',', '.'));
         const dados = { nome: novoProd.nome, categoria: novoProd.categoria, preco: isNaN(precoParsed) ?
         0 : precoParsed, custo: custoCalculado, receita: receitaTemp, un: "UN" };
@@ -683,7 +700,7 @@ export default function DashboardGlobal() {
 
       const itensRestantesAgrupados: any[] = [];
       itensRestantes.forEach((item: any) => {
-          const existente = itensRestantesAgrupados.find(i => i.id === item.id);
+          const existente = itensRestantesAgrupados.find((i: any) => i.id === item.id);
           if (existente) {
               existente.quantidade += 1;
           } else {
@@ -739,7 +756,7 @@ export default function DashboardGlobal() {
           setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
           buscarFiados(); buscarVendas();
           alert("Pagamento de fiado recebido com sucesso!");
-      } catch (err) {
+      } catch (err: any) {
           alert("Erro ao receber o fiado.");
       }
   };
@@ -774,7 +791,7 @@ export default function DashboardGlobal() {
     setPagamentosSplit(Array.from({ length: qtd }).map((_, i) => ({ id: i + 1, valor: i === qtd - 1 ? valorBase + d : valorBase, metodo: "PIX" })));
   };
 
-  const alterarMetodoPagamento = (id: number, novoMetodo: string) => { setPagamentosSplit((prev: any[]) => prev.map(p => p.id === id ? { ...p, metodo: novoMetodo } : p)); };
+  const alterarMetodoPagamento = (id: number, novoMetodo: string) => { setPagamentosSplit((prev: any[]) => prev.map((p: any) => p.id === id ? { ...p, metodo: novoMetodo } : p)); };
   
   const abrirCheckout = () => { 
     setFichaMesaAberta(false); 
@@ -784,37 +801,101 @@ export default function DashboardGlobal() {
     setTimeout(() => setModalCheckoutAberto(true), 200); 
   };
   
-  // Adiciona nova pessoa/aba diretamente em uma mesa ocupada
-  const adicionarPessoaAMesaAberta = async () => {
+  // Função inteligente que recebe tanto o novo nome string quanto a mesclagem com comandas ativas
+  const confirmarAdicaoOuFusaoPessoa = async () => {
     if (!mesaSelecionada) return;
-    const novoNomeRaw = prompt("Digite o nome da nova pessoa para adicionar a esta mesa:");
-    if (!novoNomeRaw) return;
-    const novoNome = novoNomeRaw.trim().toUpperCase();
-    
-    const pessoasAtuais = getPessoasDaMesa(mesaSelecionada);
-    if (pessoasAtuais.map(n => n.toUpperCase()).includes(novoNome)) {
-      alert("Essa pessoa já está registrada nesta mesa.");
-      return;
-    }
 
-    const novoClienteStr = mesaSelecionada.cliente ? `${mesaSelecionada.cliente} / ${novoNome}` : novoNome;
-    const mesaAtualizada = { ...mesaSelecionada, cliente: novoClienteStr };
+    if (tipoAdicaoPessoa === "nova") {
+        const novoNome = inputNovoNomePessoa.trim().toUpperCase();
+        if (!novoNome) return alert("Digite um nome válido.");
+        
+        const pessoasAtuais = getPessoasDaMesa(mesaSelecionada);
+        if (pessoasAtuais.map(n => n.toUpperCase()).includes(novoNome)) {
+            alert("Essa pessoa já está registrada nesta mesa.");
+            return;
+        }
 
-    if (isOffline) {
-      setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
-      setMesaSelecionada(mesaAtualizada);
-      setPessoaAtivaMesa(novoNome);
-      alert(`Pessoa ${novoNome} adicionada localmente à mesa!`);
-      return;
-    }
+        const novoClienteStr = mesaSelecionada.cliente ? `${mesaSelecionada.cliente} / ${novoNome}` : novoNome;
+        const mesaAtualizada = { ...mesaSelecionada, cliente: novoClienteStr };
 
-    try {
-      await supabase.from('mesas').update({ cliente: novoClienteStr }).eq('id', mesaSelecionada.id);
-      setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
-      setMesaSelecionada(mesaAtualizada);
-      setPessoaAtivaMesa(novoNome);
-    } catch (err) {
-      alert("Erro ao adicionar pessoa à mesa.");
+        if (isOffline) {
+            setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
+            setMesaSelecionada(mesaAtualizada);
+            setPessoaAtivaMesa(novoNome);
+            setInputNovoNomePessoa("");
+            setModalAdicionarPessoa(false);
+            alert(`Pessoa ${novoNome} adicionada localmente à mesa!`);
+            return;
+        }
+
+        try {
+            await supabase.from('mesas').update({ cliente: novoClienteStr }).eq('id', mesaSelecionada.id);
+            setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
+            setMesaSelecionada(mesaAtualizada);
+            setPessoaAtivaMesa(novoNome);
+            setInputNovoNomePessoa("");
+            setModalAdicionarPessoa(false);
+        } catch (err: any) { alert("Erro ao adicionar pessoa à mesa."); }
+
+    } else {
+        const idMesaMesclar = parseInt(selecaoMesaMesclar);
+        if (!idMesaMesclar) return alert("Selecione uma mesa ativa para mesclar.");
+        
+        const mesaOrigem = mesasReais.find((m: any) => m.id === idMesaMesclar);
+        if (!mesaOrigem) return alert("Mesa de origem não localizada.");
+
+        const identificadorOrigem = typeof mesaOrigem.numero === 'number' && mesaOrigem.numero >= 1000 
+            ? (mesaOrigem.cliente || "Avulso") 
+            : `Mesa ${mesaOrigem.numero}`;
+
+        const itensMesclados = [...mesaSelecionada.itens];
+        if (Array.isArray(mesaOrigem.itens)) {
+            mesaOrigem.itens.forEach((itemOrigem: any) => {
+                const donoPreservado = itemOrigem.dono || identificadorOrigem;
+                const index = itensMesclados.findIndex((i: any) => i.id === itemOrigem.id && (i.dono || "Consumidor") === donoPreservado);
+                if (index >= 0) { itensMesclados[index].quantidade += itemOrigem.quantidade; }
+                else { itensMesclados.push({ ...itemOrigem, dono: donoPreservado }); }
+            });
+        }
+
+        const totalMesclado = (Number(mesaSelecionada.total) || 0) + (Number(mesaOrigem.total) || 0);
+        const pessoasDestino = getPessoasDaMesa(mesaSelecionada);
+        const pessoasOrigem = getPessoasDaMesa(mesaOrigem);
+        
+        pessoasOrigem.forEach((pStr: string) => {
+            const rotulo = pStr === "Consumidor" ? identificadorOrigem : pStr;
+            if (!pessoasDestino.includes(rotulo)) pessoasDestino.push(rotulo);
+        });
+
+        const clienteMescladoStr = pessoasDestino.join(" / ");
+        const mesaAtualizadaDestino = { ...mesaSelecionada, total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr };
+
+        if (isOffline) {
+            setMesasReais((prev: any[]) => prev.filter(m => m.id !== mesaOrigem.id).map(m => m.id === mesaSelecionada.id ? mesaAtualizadaDestino : m));
+            setMesaSelecionada(mesaAtualizadaDestino);
+            setPessoaAtivaMesa(identificadorOrigem);
+            setSelecaoMesaMesclar("");
+            setModalAdicionarPessoa(false);
+            registrarAcaoOffline({
+                tipo: 'MESCLAR_MESAS',
+                payload: { idDestino: mesaSelecionada.id, itensMesclados, totalMesclado, clienteMescladoStr, idOrigem: mesaOrigem.id },
+                descricao: `Fusão da ${identificadorOrigem} na Mesa ${mesaSelecionada.numero}`
+            });
+            alert(`Comanda unida localmente com absoluta separação de itens!`);
+            return;
+        }
+
+        try {
+            await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', mesaSelecionada.id);
+            await supabase.from('mesas').delete().eq('id', mesaOrigem.id);
+            
+            setMesasReais((prev: any[]) => prev.filter(m => m.id !== mesaOrigem.id).map(m => m.id === mesaSelecionada.id ? mesaAtualizadaDestino : m));
+            setMesaSelecionada(mesaAtualizadaDestino);
+            setPessoaAtivaMesa(identificadorOrigem);
+            setSelecaoMesaMesclar("");
+            setModalAdicionarPessoa(false);
+            alert(`Comandas unificadas com sucesso!`);
+        } catch (err: any) { alert("Erro ao mesclar comandas no banco."); }
     }
   };
 
@@ -832,9 +913,8 @@ export default function DashboardGlobal() {
       const nomesRestantes = nomesAtuais.filter(n => n !== nomePessoa);
       const novoClienteStr = nomesRestantes.join(" / ") || "Consumidor";
 
-      // Atribui estritamente para a faixa de Avulso oculta (>= 1000)
-      const proxAvulso = mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
-        Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).map(m => m.numero)) + 1 : 1001;
+      const proxAvulso = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
+        Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).map((m: any) => m.numero)) + 1 : 1001;
 
       const novaMesaAvulsa = {
         numero: proxAvulso,
@@ -848,7 +928,7 @@ export default function DashboardGlobal() {
         const mesaOrigemAtualizada = { ...mesaSelecionada, cliente: novoClienteStr, total: totalRestante, itens: itensRestantes };
         const novaMesaComId = { ...novaMesaAvulsa, id: Date.now() };
         
-        setMesasReais((prev: any[]) => [...prev.map(m => m.id === mesaSelecionada.id ? mesaOrigemAtualizada : m), novaMesaComId]);
+        setMesasReais((prev: any[]) => [...prev.map((m: any) => m.id === mesaSelecionada.id ? mesaOrigemAtualizada : m), novaMesaComId]);
         setMesaSelecionada(null);
         setPessoaAtivaMesa("Todos");
         setFichaMesaAberta(false);
@@ -865,20 +945,19 @@ export default function DashboardGlobal() {
         setFichaMesaAberta(false);
         buscarMesas();
         alert(`Comanda de ${nomePessoa} separada com sucesso como Avulso independente!`);
-      } catch (err) {
+      } catch (err: any) {
           alert("Erro ao separar comanda.");
       }
     }
   };
 
-  // Fusão refinada preservando os donos de cada item com perfeição
   const salvarEdicaoMesa = async () => {
     if (!mesaSelecionada) return;
     const novoNumParsed = parseInt(editMesaNum) || 0;
     const novoNome = editMesaCliente.trim() || "Avulso";
     const numAntigo = mesaSelecionada.numero;
     
-    const mesaDestino = mesasReais.find(m => m.numero === novoNumParsed && m.id !== mesaSelecionada.id);
+    const mesaDestino = mesasReais.find((m: any) => m.numero === novoNumParsed && m.id !== mesaSelecionada.id);
     
     if (isOffline) {
         if (mesaDestino) {
@@ -895,7 +974,7 @@ export default function DashboardGlobal() {
             if (!nomesDestino.includes(novoNome)) nomesDestino.push(novoNome);
             const clienteMescladoStr = nomesDestino.join(" / ");
 
-            setMesasReais((prev: any[]) => prev.filter(m => m.id !== mesaSelecionada.id).map(m => m.id === mesaDestino.id ? { ...m, total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr } : m));
+            setMesasReais((prev: any[]) => prev.filter((m: any) => m.id !== mesaSelecionada.id).map((m: any) => m.id === mesaDestino.id ? { ...m, total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr } : m));
             setMesaSelecionada(null);
             setPessoaAtivaMesa("Todos");
             setFichaMesaAberta(false);
@@ -908,7 +987,7 @@ export default function DashboardGlobal() {
               itensAtualizados = mesaSelecionada.itens.map((i: any) => ({ ...i, dono: novoNome }));
             }
             const mesaAtualizada = { ...mesaSelecionada, numero: novoNumParsed || numAntigo, cliente: novoNome, itens: itensAtualizados };
-            setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
+            setMesasReais((prev: any[]) => prev.map((m: any) => m.id === mesaSelecionada.id ? mesaAtualizada : m));
             setMesaSelecionada(mesaAtualizada);
             setPessoaAtivaMesa("Todos");
             setModalEditarMesa(false);
@@ -955,9 +1034,7 @@ export default function DashboardGlobal() {
             buscarMesas();
             alert("Identificação atualizada com sucesso!");
         }
-    } catch (err) {
-        alert("Erro ao editar identificação da mesa.");
-    }
+    } catch (err: any) { alert("Erro ao editar identificação da mesa."); }
   };
 
   const finalizarComoFiado = async () => {
@@ -979,7 +1056,7 @@ export default function DashboardGlobal() {
 
     if (isOffline) {
         setFiadosBase((prevFiados: any[]) => {
-            const fiadoExistente = prevFiados.find(f => f.cliente_nome?.toLowerCase() === nomeCliente.toLowerCase());
+            const fiadoExistente = prevFiados.find((f: any) => f.cliente_nome?.toLowerCase() === nomeCliente.toLowerCase());
             if (fiadoExistente) {
                 const novoTotal = parseFloat(Number(fiadoExistente.total + totalFiadoAtual).toFixed(2));
                 let itensMesclados = [...fiadoExistente.itens];
@@ -988,7 +1065,7 @@ export default function DashboardGlobal() {
                     if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; } 
                     else { itensMesclados.push({ ...itemNovo }); }
                 });
-                return prevFiados.map(f => f.id === fiadoExistente.id ? { ...f, total: novoTotal, itens: itensMesclados } : f);
+                return prevFiados.map((f: any) => f.id === fiadoExistente.id ? { ...f, total: novoTotal, itens: itensMesclados } : f);
             } else {
                 const novoFiado = { id: Date.now(), cliente_nome: nomeCliente, total: totalFiadoAtual, itens: itensMesaFiado, data_criacao: new Date().toISOString() };
                 return [novoFiado, ...prevFiados];
@@ -1002,9 +1079,9 @@ export default function DashboardGlobal() {
             const novoClienteStr = nomesAtuais.filter(n => n !== modoFechamentoCheckout).join(" / ") || "Consumidor";
             
             const mesaAtualizada = { ...mesaSelecionada, cliente: novoClienteStr, total: totalRestante, itens: itensRestantes };
-            setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
+            setMesasReais((prev: any[]) => prev.map((m: any) => m.id === mesaSelecionada.id ? mesaAtualizada : m));
         } else {
-            setMesasReais((prev: any[]) => prev.filter(m => m.numero !== mesaSelecionada.numero));
+            setMesasReais((prev: any[]) => prev.filter((m: any) => m.numero !== mesaSelecionada.numero));
         }
 
         registrarAcaoOffline({
@@ -1066,9 +1143,7 @@ export default function DashboardGlobal() {
         setPessoaAtivaMesa("Todos");
         setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarFiados();
         alert(`Fiado salvo com sucesso na conta de ${nomeCliente}!`);
-    } catch (err: any) {
-        alert("Erro ao lançar conta como fiado.");
-    }
+    } catch (err: any) { alert("Erro ao lançar conta como fiado."); }
   };
 
   const finalizarPagamentoMesa = async () => {
@@ -1102,9 +1177,9 @@ export default function DashboardGlobal() {
             const novoClienteStr = nomesAtuais.filter(n => n !== modoFechamentoCheckout).join(" / ") || "Consumidor";
             
             const mesaAtualizada = { ...mesaSelecionada, cliente: novoClienteStr, total: totalRestante, itens: itensRestantes };
-            setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
+            setMesasReais((prev: any[]) => prev.map((m: any) => m.id === mesaSelecionada.id ? mesaAtualizada : m));
         } else {
-            setMesasReais((prev: any[]) => prev.filter(m => m.id !== mesaSelecionada.id));
+            setMesasReais((prev: any[]) => prev.filter((m: any) => m.id !== mesaSelecionada.id));
         }
         
         registrarAcaoOffline({
@@ -1148,10 +1223,10 @@ export default function DashboardGlobal() {
       try {
         if (mesa.itens && mesa.itens.length > 0) {
           for (const item of mesa.itens) {
-            const p = produtosBase.find(pb => pb.id === item.id);
+            const p = produtosBase.find((pb: any) => pb.id === item.id);
             if (p && p.receita && Array.isArray(p.receita)) {
               for (const ing of p.receita) {
-                const insumo = insumosBase.find(i => i.id === ing.insumo_id);
+                const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
                 if (insumo) {
                   let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
                   const novoEstoque = insumo.estoque + qtdUsada; 
@@ -1167,9 +1242,7 @@ export default function DashboardGlobal() {
         buscarMesas();
         buscarInsumos();
         alert("Comanda excluída com sucesso!");
-      } catch(err: any) {
-        alert("Erro ao excluir comanda.");
-      }
+      } catch(err: any) { alert("Erro ao excluir comanda."); }
     }
   };
 
@@ -1180,10 +1253,10 @@ export default function DashboardGlobal() {
     }
     if (confirm(`Deseja remover "${item.quantidade}x ${item.nome}" da comanda?`)) {
       try {
-        const p = produtosBase.find(pb => pb.id === item.id);
+        const p = produtosBase.find((pb: any) => pb.id === item.id);
         if (p && p.receita && Array.isArray(p.receita)) {
           for (const ing of p.receita) {
-            const insumo = insumosBase.find(i => i.id === ing.insumo_id);
+            const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
             if (insumo) {
               let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
               const novoEstoque = insumo.estoque + qtdUsada;
@@ -1203,17 +1276,15 @@ export default function DashboardGlobal() {
         setMesaSelecionada({ ...mesa, itens: novosItens, total: novoTotal });
         buscarMesas();
         buscarInsumos();
-      } catch(err: any) {
-        alert("Erro ao estornar item.");
-      }
+      } catch(err: any) { alert("Erro ao estornar item."); }
     }
   };
 
   // ================= SALÃO E OPERAÇÕES =================
   const adicionarMesaSalao = async () => {
     try {
-        const prox = mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).length > 0 ?
-        Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).map(m => m.numero)) + 1 : 1;
+        const prox = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).length > 0 ?
+        Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).map((m: any) => m.numero)) + 1 : 1;
         const { error } = await supabase.from('mesas').insert([{ numero: prox, status: 'livre', total: 0, itens: [] }]);
         if (error) throw error; buscarMesas();
     } catch (err: any) { alert("ERRO SUPABASE (Adicionar Mesa)."); }
@@ -1227,7 +1298,6 @@ export default function DashboardGlobal() {
         setModalNovaComanda(true);
     } else { 
         setMesaSelecionada(mesa); 
-        const pessoas = getPessoasDaMesa(mesa);
         setPessoaAtivaMesa("Todos");
         setFichaMesaAberta(true); 
     }
@@ -1240,14 +1310,11 @@ export default function DashboardGlobal() {
     let novaMesa: any = null;
     const numMesaParsed = parseInt(inputMesaNova) || 0;
     
-    const proxFisica = mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).length > 0 ?
-      Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).map(m => m.numero)) + 1 : 1;
-      
-    const proxAvulso = mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
-      Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).map(m => m.numero)) + 1 : 1001;
+    const proxAvulso = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
+      Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).map((m: any) => m.numero)) + 1 : 1001;
 
     if (tipoAtendimento === "mesa") {
-        const mesaExiste = mesasReais.find(m => m.numero.toString() === inputMesaNova);
+        const mesaExiste = mesasReais.find((m: any) => m.numero.toString() === inputMesaNova);
         if (mesaExiste) {
             novaMesa = { ...mesaExiste, status: 'ocupada', cliente: inputNomeCliente };
         } else {
@@ -1259,8 +1326,8 @@ export default function DashboardGlobal() {
 
     if (isOffline) {
         setMesasReais((prev: any[]) => {
-            const existe = prev.find(m => m.numero === novaMesa.numero);
-            if (existe) return prev.map(m => m.numero === novaMesa.numero ? novaMesa : m);
+            const existe = prev.find((m: any) => m.numero === novaMesa.numero);
+            if (existe) return prev.map((m: any) => m.numero === novaMesa.numero ? novaMesa : m);
             return [...prev, novaMesa];
         });
         setMesaSelecionada(novaMesa);
@@ -1279,7 +1346,7 @@ export default function DashboardGlobal() {
     try {
         let nMesa = null;
         if (tipoAtendimento === "mesa") {
-            const mesaExiste = mesasReais.find(m => m.numero.toString() === inputMesaNova);
+            const mesaExiste = mesasReais.find((m: any) => m.numero.toString() === inputMesaNova);
             if (mesaExiste) {
                 const { error } = await supabase.from('mesas').update({ status: 'ocupada', cliente: inputNomeCliente }).eq('numero', inputMesaNova);
                 if(error) throw error; nMesa = { ...mesaExiste, status: 'ocupada', cliente: inputNomeCliente };
@@ -1300,20 +1367,20 @@ export default function DashboardGlobal() {
     } catch (err: any) { alert("ERRO SUPABASE (Abertura de Mesa)."); }
   };
 
-  const adicionarItem = (p: any) => { setPedidoAtual((prev: any[]) => { const e = prev.find(i => i.id === p.id); return e ? prev.map(i => i.id === p.id ? { ...i, quantidade: i.quantidade + 1 } : i) : [...prev, { ...p, quantidade: 1 }]; }); };
-  const removerItem = (id: string) => { setPedidoAtual((prev: any[]) => { const e = prev.find(i => i.id === id); return e && e.quantidade > 1 ? prev.map(i => i.id === id ? { ...i, quantidade: i.quantidade - 1 } : i) : prev.filter(i => i.id !== id); }); };
+  const adicionarItem = (p: any) => { setPedidoAtual((prev: any[]) => { const e = prev.find((i: any) => i.id === p.id); return e ? prev.map((i: any) => i.id === p.id ? { ...i, quantidade: i.quantidade + 1 } : i) : [...prev, { ...p, quantidade: 1 }]; }); };
+  const removerItem = (id: string) => { setPedidoAtual((prev: any[]) => { const e = prev.find((i: any) => i.id === id); return e && e.quantidade > 1 ? prev.map((i: any) => i.id === id ? { ...i, quantidade: i.quantidade - 1 } : i) : prev.filter((i: any) => i.id !== id); }); };
 
   // ================= INTEGRAÇÃO KDS E BAIXA ESTOQUE =================
   const confirmarEEnviarPedido = async () => {
     const numMesaApoio = mesaSelecionada?.numero || inputMesaNova || "Avulso";
     const clienteApoio = mesaSelecionada?.cliente || inputNomeCliente || "Cliente";
     
-    const totalRemessa = pedidoAtual.reduce((acc, i) => acc + (i.preco * i.quantidade), 0);
+    const totalRemessa = pedidoAtual.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
     const totalNovo = (Number(mesaSelecionada?.total) || 0) + totalRemessa;
     const itensAntigos = mesaSelecionada?.itens || [];
     let itensAtualizados = [...itensAntigos];
     
-    pedidoAtual.forEach(itemNovo => {
+    pedidoAtual.forEach((itemNovo: any) => {
         const donoNovo = pessoaAtivaMesa === "Todos" ? (getPessoasDaMesa(mesaSelecionada)[0] || "Consumidor") : pessoaAtivaMesa;
         const index = itensAtualizados.findIndex((i: any) => i.id === itemNovo.id && (i.dono || "Consumidor") === donoNovo);
         if (index >= 0) { 
@@ -1332,15 +1399,15 @@ export default function DashboardGlobal() {
     if (isOffline) {
         const mesaAtualizadaLocal = { ...mesaSelecionada, total: totalNovo, itens: itensAtualizados };
         if (mesaSelecionada) setMesaSelecionada(mesaAtualizadaLocal);
-        setMesasReais((prev: any[]) => prev.map(m => m.numero === mesaAtualizadaLocal.numero ? { ...m, total: totalNovo, itens: itensAtualizados } : m));
+        setMesasReais((prev: any[]) => prev.map((m: any) => m.numero === mesaAtualizadaLocal.numero ? { ...m, total: totalNovo, itens: itensAtualizados } : m));
 
         setInsumosBase((prevInsumos: any[]) => {
             let insumosCopia = [...prevInsumos];
             for (const item of pedidoAtual) {
-                const p = produtosBase.find(pb => pb.id === item.id);
+                const p = produtosBase.find((pb: any) => pb.id === item.id);
                 if (p && p.receita && Array.isArray(p.receita)) {
                     for (const ing of p.receita) {
-                        const idx = insumosCopia.findIndex(i => i.id === ing.insumo_id);
+                        const idx = insumosCopia.findIndex((i: any) => i.id === ing.insumo_id);
                         if (idx >= 0) {
                             let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
                             insumosCopia[idx] = { ...insumosCopia[idx], estoque: insumosCopia[idx].estoque - qtdUsada };
@@ -1364,15 +1431,15 @@ export default function DashboardGlobal() {
     }
 
     try {
-        const mesaId = mesaSelecionada?.id || mesasReais.find(m => m.numero == inputMesaNova)?.id;
+        const mesaId = mesaSelecionada?.id || mesasReais.find((m: any) => m.numero == inputMesaNova)?.id;
         await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('id', mesaId);
         if (mesaSelecionada) setMesaSelecionada({ ...mesaSelecionada, total: totalNovo, itens: itensAtualizados });
         
         for (const item of pedidoAtual) {
-          const p = produtosBase.find(pb => pb.id === item.id);
+          const p = produtosBase.find((pb: any) => pb.id === item.id);
           if (p && p.receita && Array.isArray(p.receita)) {
               for (const ing of p.receita) {
-                  const insumo = insumosBase.find(i => i.id === ing.insumo_id);
+                  const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
                   if (insumo) {
                       let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
                       const novoEstoque = insumo.estoque - qtdUsada;
@@ -1387,7 +1454,7 @@ export default function DashboardGlobal() {
     } catch(err: any) { alert("ERRO SUPABASE (Lançar Pedido)."); }
   };
   
-  const itensExibidosCardapio = produtosBase.filter(item => {
+  const itensExibidosCardapio = produtosBase.filter((item: any) => {
     const matchBusca = item.nome.toLowerCase().includes(buscaProduto.toLowerCase());
     const matchCat = categoriaAtiva === "Todas" || item.categoria === categoriaAtiva;
     return matchBusca && matchCat;
@@ -1542,7 +1609,7 @@ export default function DashboardGlobal() {
         </div>
       </header>
 
-      {/* FINANCEIRO CONSOLIDADO */}
+      {/* FINANCEIRO CONSOLIDADO (UNIFICADO COM PERDAS VERMELHAS E MODAIS CIRÚRGICOS) */}
       {visaoAtiva === "financeiro" && usuarioAtual?.role === 'gerente' && (
         <main className="p-6 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-800 print:border-none print:p-0 print:bg-transparent">
@@ -1618,17 +1685,42 @@ export default function DashboardGlobal() {
                     </div>
 
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-hide print:max-h-none print:overflow-visible">
-                        {historicoAgrupado.length === 0 ? <p className="text-zinc-600 italic text-center py-6 font-black uppercase">Sem dados</p> : (
-                          historicoAgrupado.map((v: any, idx) => (
-                            <div key={idx} onClick={() => !v.isConsolidated && setVendaDetalhe(v)} className={`bg-zinc-950 p-4 rounded-2xl border border-zinc-800 flex justify-between items-center transition-all ${!v.isConsolidated ? 'cursor-pointer hover:border-yellow-500/50 hover:bg-zinc-900/50' : ''} print:bg-white print:border-zinc-300`}>
+                        {historicoConsolidadoUnificado.length === 0 ? <p className="text-zinc-600 italic text-center py-6 font-black uppercase">Sem dados</p> : (
+                          historicoConsolidadoUnificado.map((v: any, idx: number) => {
+                            const isPerda = v.typeObj === 'perda';
+                            return (
+                            <div 
+                                key={idx} 
+                                onClick={() => !v.isConsolidated && setItemDetalheFinanceiro(v)} 
+                                className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${!v.isConsolidated ? 'cursor-pointer' : ''} ${isPerda ? 'bg-red-950/10 border-red-900/30 hover:bg-red-950/20 hover:border-red-500/50' : 'bg-zinc-950 border-zinc-800 hover:border-yellow-500/50 hover:bg-zinc-900/50'} print:bg-white print:border-zinc-300`}
+                            >
                                 {v.isConsolidated ? (
                                  <div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-black text-yellow-500 print:border-zinc-300 print:bg-white"><CalendarIcon size={16}/></div><div><p className="font-black text-zinc-200 uppercase text-xs print:text-black">{v.key}</p><p className="text-[10px] text-zinc-500">{v.count} Mesas Fechadas</p></div></div>
                                 ) : (
-                                 <div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-black text-yellow-500 print:border-zinc-300 print:bg-white"><Receipt size={16}/></div><div><p className="font-black text-zinc-200 uppercase text-xs print:text-black">{v.cliente_nome}</p><p className="text-[10px] text-zinc-500">{new Date(v.data_venda).toLocaleTimeString()} - Comanda {v.mesa_numero || 'Avulsa'}</p></div></div>
+                                 <div className="flex items-center gap-4">
+                                     <div className={`h-10 w-10 rounded-full border flex items-center justify-center font-black shrink-0 ${isPerda ? 'bg-red-950/40 border-red-800 text-red-500' : 'bg-zinc-900 border-zinc-800 text-yellow-500'} print:border-zinc-300 print:bg-white`}>
+                                         {isPerda ? <AlertOctagon size={16} /> : <Receipt size={16}/>}
+                                     </div>
+                                     <div>
+                                         <div className="flex items-center gap-2">
+                                             <p className={`font-black uppercase text-xs truncate max-w-[150px] ${isPerda ? 'text-red-400' : 'text-zinc-200'} print:text-black`}>
+                                                 {isPerda ? v.nome_insumo : v.cliente_nome}
+                                             </p>
+                                             {isPerda && <Badge className="bg-red-500/10 text-red-500 border-red-500/20 text-[8px] px-1 font-bold">PERDA / QUEBRA</Badge>}
+                                         </div>
+                                         <p className="text-[10px] text-zinc-500 font-bold">
+                                             {new Date(isPerda ? v.data_perda : v.data_venda).toLocaleTimeString()} {isPerda ? `• Prejuízo de Insumo` : `• Comanda ${v.mesa_numero || 'Avulsa'}`}
+                                         </p>
+                                     </div>
+                                 </div>
                                 )}
-                                <div className="text-right"><p className="font-black text-white print:text-black">R$ {v.isConsolidated ? v.total.toFixed(2) : Number(v.total_venda).toFixed(2)}</p></div>
+                                <div className="text-right shrink-0">
+                                    <p className={`font-black ${isPerda ? 'text-red-500' : 'text-white'} print:text-black`}>
+                                        R$ {v.isConsolidated ? v.total.toFixed(2) : Number(isPerda ? v.custo_perda : v.total_venda).toFixed(2)}
+                                    </p>
+                                </div>
                             </div>
-                          ))
+                          )})
                         )}
                     </div>
                 </div>
@@ -1665,7 +1757,7 @@ export default function DashboardGlobal() {
                           {fiadosBase.length === 0 ? (
                               <tr><td colSpan={4} className="p-6 text-center text-zinc-500 italic uppercase font-black">Nenhum fiado pendente na praça.</td></tr>
                           ) : (
-                              fiadosBase.map(f => (
+                              fiadosBase.map((f: any) => (
                                   <tr key={f.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors">
                                       <td className="p-6 font-black uppercase text-zinc-200">{f.cliente_nome}</td>
                                       <td className="p-6 text-zinc-500 text-xs">{new Date(f.data_criacao).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
@@ -1684,7 +1776,7 @@ export default function DashboardGlobal() {
           {visaoGestao === "cardapio" && (
             <div className="animate-in fade-in">
               <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black uppercase italic tracking-tighter">Itens do Cardápio</h2><button onClick={abrirParaNovoProduto} className="bg-zinc-100 text-zinc-950 font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-white shadow-2xl transition-all"><Plus size={18}/> NOVO PRODUTO</button></div>
-              <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"><table className="w-full text-left font-bold text-sm"><thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800"><tr><th className="p-6">Produto</th><th className="p-6">Categoria</th><th className="p-6 text-yellow-500">Venda</th><th className="p-6 text-center">Ações</th></tr></thead><tbody>{produtosBase.map(p => (<tr key={p.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors"><td className="p-6 font-black uppercase">{p.nome}</td><td className="p-6 text-zinc-400 text-xs uppercase">{p.categoria}</td><td className="p-6 text-yellow-500 font-black italic text-lg">R$ {p.preco.toFixed(2)}</td><td className="p-6 text-center"><button onClick={() => abrirParaEdicaoProduto(p)} className="p-2 text-zinc-500 hover:text-yellow-500 transition-all"><Edit size={18}/></button></td></tr>))}</tbody></table></div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"><table className="w-full text-left font-bold text-sm"><thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800"><tr><th className="p-6">Produto</th><th className="p-6">Categoria</th><th className="p-6 text-yellow-500">Venda</th><th className="p-6 text-center">Ações</th></tr></thead><tbody>{produtosBase.map((p: any) => (<tr key={p.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors"><td className="p-6 font-black uppercase">{p.nome}</td><td className="p-6 text-zinc-400 text-xs uppercase">{p.categoria}</td><td className="p-6 text-yellow-500 font-black italic text-lg">R$ {p.preco.toFixed(2)}</td><td className="p-6 text-center"><button onClick={() => abrirParaEdicaoProduto(p)} className="p-2 text-zinc-500 hover:text-yellow-500 transition-all"><Edit size={18}/></button></td></tr>))}</tbody></table></div>
             </div>
           )}
 
@@ -1694,7 +1786,7 @@ export default function DashboardGlobal() {
               <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black uppercase italic tracking-tighter">Insumos e Matéria Prima</h2><button onClick={() => { setInsumoEmEdicao(null);
               setNovoInsumo({ nome: "", formato: "unidade", custo_formato: "", qtd_comprada: "", rendimento: "" }); setModalNovoInsumo(true);
               }} className="bg-zinc-100 text-zinc-950 font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-white shadow-2xl transition-all"><Plus size={18}/> ADICIONAR INSUMO</button></div>
-              <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"><table className="w-full text-left font-bold text-sm"><thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800"><tr><th className="p-6">Insumo</th><th className="p-6">Estoque Atual</th><th className="p-6">Custo Exato</th><th className="p-6 text-center uppercase">Ações</th></tr></thead><tbody>{insumosBase.map(i => (<tr key={i.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors"><td className="p-6 font-black uppercase">{i.nome}</td><td className="p-6"><Badge variant="outline" className={i.estoque < 1000 && i.unidade !== 'UN' ? "border-red-500 text-red-400 bg-red-500/5" : "border-zinc-700 text-zinc-400"}>{i.estoque} {i.unidade}</Badge></td><td className="p-6 text-zinc-400">R$ {i.custo_unidade.toFixed(4)} / {i.unidade}</td><td className="p-6 text-center"><button onClick={() => abrirParaEdicaoInsumo(i)} className="p-2 text-zinc-500 hover:text-yellow-500 transition-all"><Edit size={18}/></button></td></tr>))}</tbody></table></div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"><table className="w-full text-left font-bold text-sm"><thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800"><tr><th className="p-6">Insumo</th><th className="p-6">Estoque Atual</th><th className="p-6">Custo Exato</th><th className="p-6 text-center uppercase">Ações</th></tr></thead><tbody>{insumosBase.map((i: any) => (<tr key={i.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors"><td className="p-6 font-black uppercase">{i.nome}</td><td className="p-6"><Badge variant="outline" className={i.estoque < 1000 && i.unidade !== 'UN' ? "border-red-500 text-red-400 bg-red-500/5" : "border-zinc-700 text-zinc-400"}>{i.estoque} {i.unidade}</Badge></td><td className="p-6 text-zinc-400">R$ {i.custo_unidade.toFixed(4)} / {i.unidade}</td><td className="p-6 text-center"><button onClick={() => abrirParaEdicaoInsumo(i)} className="p-2 text-zinc-500 hover:text-yellow-500 transition-all"><Edit size={18}/></button></td></tr>))}</tbody></table></div>
             </div>
           )}
 
@@ -1734,7 +1826,7 @@ export default function DashboardGlobal() {
                           {perdasFiltradas.length === 0 ? (
                               <tr><td colSpan={5} className="p-6 text-center text-zinc-500 italic uppercase font-black">Nenhuma perda no período selecionado</td></tr>
                           ) : (
-                              perdasFiltradas.map(p => (
+                              perdasFiltradas.map((p: any) => (
                                   <tr key={p.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors">
                                       <td className="p-6 font-black uppercase text-zinc-200">{p.nome_insumo}</td>
                                       <td className="p-6 text-zinc-400">{p.quantidade}</td>
@@ -1754,7 +1846,7 @@ export default function DashboardGlobal() {
           {visaoGestao === "equipe" && (
             <div className="animate-in fade-in">
               <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black uppercase italic tracking-tighter">Controle de Acessos</h2><button onClick={() => { setNovoMembro({ nome: "", email: "", senha: "", role: "colaborador" }); setModalNovoUsuario(true); }} className="bg-blue-600 text-white font-black px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-blue-500 shadow-2xl transition-all"><UserPlus size={18}/> NOVO COLABORADOR</button></div>
-              <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"><table className="w-full text-left font-bold text-sm"><thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800"><tr><th className="p-6">Nome do Usuário</th><th className="p-6">Email (Login)</th><th className="p-6 text-blue-400">Nível de Acesso</th><th className="p-6 text-center">Ações</th></tr></thead><tbody>{usuariosEquipe.map(u => (<tr key={u.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors"><td className="p-6 font-black uppercase">{u.nome}</td><td className="p-6 text-zinc-400 text-xs">{u.email}</td><td className="p-6 text-blue-500 font-black uppercase text-[10px] tracking-widest">{u.role}</td><td className="p-6 text-center"><button onClick={() => removerUsuario(u.id)} disabled={u.role === 'gerente'} className={`p-2 transition-all ${u.role === 'gerente' ? 'text-zinc-700 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}><Trash2 size={18}/></button></td></tr>))}</tbody></table></div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-2xl"><table className="w-full text-left font-bold text-sm"><thead className="bg-zinc-950 text-[10px] font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-800"><tr><th className="p-6">Nome do Usuário</th><th className="p-6">Email (Login)</th><th className="p-6 text-blue-400">Nível de Acesso</th><th className="p-6 text-center">Ações</th></tr></thead><tbody>{usuariosEquipe.map((u: any) => (<tr key={u.id} className="border-b border-zinc-800/30 hover:bg-zinc-800/20 transition-colors"><td className="p-6 font-black uppercase">{u.nome}</td><td className="p-6 text-zinc-400 text-xs">{u.email}</td><td className="p-6 text-blue-500 font-black uppercase text-[10px] tracking-widest">{u.role}</td><td className="p-6 text-center"><button onClick={() => removerUsuario(u.id)} disabled={u.role === 'gerente'} className={`p-2 transition-all ${u.role === 'gerente' ? 'text-zinc-700 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}><Trash2 size={18}/></button></td></tr>))}</tbody></table></div>
             </div>
           )}
         </main>
@@ -1776,13 +1868,12 @@ export default function DashboardGlobal() {
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-             {mesasReais.map((m) => {
+             {mesasReais.map((m: any) => {
               const isAvulso = typeof m.numero === 'number' && m.numero >= 1000;
               return (
               <div key={m.id} onClick={() => interagirComMesa(m)} className={`p-6 rounded-[2rem] border h-44 flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.03] active:scale-95 shadow-lg ${m.status === 'livre' ? 'bg-zinc-900/40 border-zinc-800' : 'bg-yellow-500/10 border-yellow-500/50 shadow-yellow-500/5'}`}>
                 <div className="flex justify-between items-start">
                     
-                    {/* EXIBIÇÃO GRANULAR: HIDE NUMERO PARA AVULSOS */}
                     {isAvulso ? (
                         <span className="text-xl font-black italic tracking-tighter text-yellow-500 truncate max-w-[140px]" title={m.cliente}>
                             {m.cliente}
@@ -1808,7 +1899,7 @@ export default function DashboardGlobal() {
                 </div>
                 <p className={`text-sm font-black tracking-widest uppercase ${m.status === 'livre' ? 'text-zinc-600' : 'text-yellow-500'}`}>{m.status === 'livre' ? 'Livre' : `R$ ${Number(m.total).toFixed(2).replace('.', ',')}`}</p>
               </div>
-            )})}
+            )})};
           </div>
         </main>
       )}
@@ -1816,7 +1907,7 @@ export default function DashboardGlobal() {
       {/* COZINHA / KDS */}
       <Sheet open={modalPedidosAberto} onOpenChange={setModalPedidosAberto}>
         <SheetContent className="w-full sm:max-w-md bg-zinc-950 border-zinc-800 p-0 flex flex-col text-zinc-50 shadow-2xl">
-             <div className="p-8 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
+          <div className="p-8 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
             <SheetTitle className="text-3xl font-black text-yellow-500 italic uppercase">Cozinha / Preparo</SheetTitle>
             <p className="text-xs text-zinc-400 mt-2">Gerencie os pedidos que precisam ser preparados e entregues.</p>
           </div>
@@ -1824,7 +1915,7 @@ export default function DashboardGlobal() {
             {pedidosPendentes.length === 0 ? (
                <p className="text-zinc-600 italic text-center py-6 font-black uppercase">Nenhum pedido pendente</p>
             ) : (
-               pedidosPendentes.map(pedido => (
+               pedidosPendentes.map((pedido: any) => (
                   <div key={pedido.id} className="bg-zinc-900 border border-red-500/30 rounded-[1.5rem] overflow-hidden shadow-lg shadow-red-500/5">
                   <div className="bg-red-500/10 p-4 border-b border-red-500/20 flex justify-between items-center">
                           <div>
@@ -1844,7 +1935,7 @@ export default function DashboardGlobal() {
                           ))}
                        </div>
                       <div className="p-4 border-t border-zinc-800 bg-zinc-950/50">
-                          <button onClick={() => setPedidosPendentes((prev: any[]) => prev.filter(p => p.id !== pedido.id))} className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl text-sm uppercase italic transition-all flex justify-center items-center gap-2">
+                          <button onClick={() => setPedidosPendentes((prev: any[]) => prev.filter((p: any) => p.id !== pedido.id))} className="w-full bg-green-600 hover:bg-green-500 text-white font-black py-4 rounded-xl text-sm uppercase italic transition-all flex justify-center items-center gap-2">
                                 <CheckCircle size={18} /> Finalizar e Entregar
                           </button>
                       </div>
@@ -1883,8 +1974,8 @@ export default function DashboardGlobal() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-8 space-y-4">
-            {itensExibidosCardapio.map((item) => {
-              const qtd = pedidoAtual.find(i => i.id === item.id)?.quantidade || 0;
+            {itensExibidosCardapio.map((item: any) => {
+              const qtd = pedidoAtual.find((i: any) => i.id === item.id)?.quantidade || 0;
               return (
                 <div key={item.id} className={`p-5 rounded-[1.5rem] border transition-all flex justify-between items-center ${qtd > 0 ? 'border-yellow-500/40 bg-yellow-500/5 shadow-inner' : 'border-zinc-800 bg-zinc-900/30'}`}>
                   <div><p className="font-black uppercase tracking-tighter text-zinc-100">{item.nome}</p><p className="text-yellow-500 font-black text-lg italic tracking-tighter leading-tight">R$ {item.preco.toFixed(2)}</p></div>
@@ -1897,7 +1988,7 @@ export default function DashboardGlobal() {
               )
             })}
           </div>
-          <div className="p-8 border-t border-zinc-800 bg-zinc-900 shrink-0"><button onClick={() => setModalConfirmacaoAberto(true)} disabled={pedidoAtual.length === 0} className="w-full bg-yellow-500 text-zinc-950 font-black py-5 rounded-[1.5rem] flex justify-between px-8 italic tracking-tighter text-lg shadow-2xl transition-all active:scale-95"><span>CONFERIR ENVIO</span><span>R$ {pedidoAtual.reduce((acc, i) => acc + (i.preco * i.quantidade), 0).toFixed(2)}</span></button></div>
+          <div className="p-8 border-t border-zinc-800 bg-zinc-900 shrink-0"><button onClick={() => setModalConfirmacaoAberto(true)} disabled={pedidoAtual.length === 0} className="w-full bg-yellow-500 text-zinc-950 font-black py-5 rounded-[1.5rem] flex justify-between px-8 italic tracking-tighter text-lg shadow-2xl transition-all active:scale-95"><span>CONFERIR ENVIO</span><span>R$ {pedidoAtual.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0).toFixed(2)}</span></button></div>
         </SheetContent>
       </Sheet>
 
@@ -1954,7 +2045,7 @@ export default function DashboardGlobal() {
 
             <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 text-center"><Label className="text-zinc-500 font-black uppercase text-[10px] mb-4 block">Dividir conta</Label><div className="flex items-center justify-center gap-8 mt-2"><button onClick={() => handleSplitChange(pessoasSplit - 1)} className="h-12 w-12 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-400"><Minus size={24}/></button><span className="text-4xl font-black italic text-white">{pessoasSplit}</span><button onClick={() => handleSplitChange(pessoasSplit + 1)} className="h-12 w-12 bg-yellow-500 text-zinc-950 rounded-full flex items-center justify-center"><Plus size={24}/></button></div></div>
             <div className="max-h-[200px] overflow-y-auto space-y-3 scrollbar-hide">
-              {pagamentosSplit.map((pag) => (
+              {pagamentosSplit.map((pag: any) => (
                  <div key={pag.id} className="flex justify-between items-center bg-zinc-900 p-4 rounded-xl border border-zinc-800">
                  <div><p className="text-[10px] font-black text-zinc-500 uppercase">Pessoa {pag.id}</p><p className="text-lg font-black text-yellow-500 italic leading-none">R$ {pag.valor.toFixed(2)}</p></div>
                   <div className="flex gap-1 flex-wrap">
@@ -1972,62 +2063,83 @@ export default function DashboardGlobal() {
         </DialogContent>
       </Dialog>
 
-      {/* MODAL DETALHADO DE COMANDA FECHADA */}
-      <Dialog open={!!vendaDetalhe} onOpenChange={() => setVendaDetalhe(null)}>
+      {/* MODAL DETALHADO DE REGISTROS FECHADOS (VENDAS OU PERDAS) */}
+      <Dialog open={!!itemDetalheFinanceiro} onOpenChange={() => setItemDetalheFinanceiro(null)}>
           <DialogContent className="sm:max-w-[500px] bg-zinc-950 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-8 shadow-2xl">
               <DialogHeader>
-                  <DialogTitle className="text-2xl font-black uppercase text-yellow-500 italic flex justify-between items-center">
-                      <span>Comanda Fechada</span>
+                  <DialogTitle className={`text-2xl font-black uppercase italic flex justify-between items-center ${itemDetalheFinanceiro?.typeObj === 'perda' ? 'text-red-500' : 'text-yellow-500'}`}>
+                      <span>{itemDetalheFinanceiro?.typeObj === 'perda' ? 'Detalhe da Perda' : 'Comanda Fechada'}</span>
                       <Badge className="bg-zinc-900 text-zinc-400 border border-zinc-800 font-bold text-[10px]">
-                          {vendaDetalhe?.data_venda ? new Date(vendaDetalhe.data_venda).toLocaleDateString('pt-BR') : ''}
+                          {new Date(itemDetalheFinanceiro?.typeObj === 'perda' ? itemDetalheFinanceiro?.data_perda : itemDetalheFinanceiro?.data_venda).toLocaleDateString('pt-BR')}
                       </Badge>
                   </DialogTitle>
                   <DialogDescription className="text-xs text-zinc-400 font-bold uppercase mt-1">
-                      Cliente: {vendaDetalhe?.cliente_nome} {vendaDetalhe?.mesa_numero ? `(Mesa ${vendaDetalhe.mesa_numero})` : ''}
+                      {itemDetalheFinanceiro?.typeObj === 'perda' 
+                          ? `Insumo Descartado: ${itemDetalheFinanceiro?.nome_insumo}` 
+                          : `Cliente: ${itemDetalheFinanceiro?.cliente_nome} ${itemDetalheFinanceiro?.mesa_numero ? `(Mesa ${itemDetalheFinanceiro.mesa_numero})` : ''}`}
                   </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 my-4">
-                  <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest block">Itens Consumidos</Label>
-                  <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 max-h-[220px] overflow-y-auto space-y-2 scrollbar-hide">
-                      {vendaDetalhe?.itens && Array.isArray(vendaDetalhe.itens) && vendaDetalhe.itens.length > 0 ? (
-                          vendaDetalhe.itens.map((item: any, idx: number) => (
-                              <div key={idx} className="flex justify-between items-center bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/60 font-bold text-xs">
-                                  <div className="flex items-center gap-2">
-                                      <span className="text-yellow-500 font-black italic">x{item.quantidade || 1}</span>
-                                      <span className="uppercase text-zinc-200">{item.nome}</span>
+              {itemDetalheFinanceiro?.typeObj === 'perda' ? (
+                  <div className="space-y-4 my-4">
+                      <div className="bg-red-950/20 p-4 rounded-2xl border border-red-900/30 space-y-2">
+                          <div className="flex justify-between text-xs font-bold text-zinc-400">
+                              <span>Insumo Afetado:</span>
+                              <span className="text-zinc-200">{itemDetalheFinanceiro?.nome_insumo}</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-bold text-zinc-400">
+                              <span>Quantidade Informada:</span>
+                              <span className="text-red-400 font-black">{itemDetalheFinanceiro?.quantidade} UN/Métrica</span>
+                          </div>
+                          <div className="border-t border-red-900/30 pt-2 flex justify-between text-sm font-black text-red-500 italic">
+                              <span>CUSTO ABATIDO:</span>
+                              <span>R$ {Number(itemDetalheFinanceiro?.custo_perda || 0).toFixed(2)}</span>
+                          </div>
+                      </div>
+                  </div>
+              ) : (
+                  <div className="space-y-4 my-4">
+                      <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest block">Itens Consumidos</Label>
+                      <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 max-h-[220px] overflow-y-auto space-y-2 scrollbar-hide">
+                          {itemDetalheFinanceiro?.itens && Array.isArray(itemDetalheFinanceiro.itens) && itemDetalheFinanceiro.itens.length > 0 ? (
+                              itemDetalheFinanceiro.itens.map((item: any, idx: number) => (
+                                  <div key={idx} className="flex justify-between items-center bg-zinc-950 p-2.5 rounded-xl border border-zinc-800/60 font-bold text-xs">
+                                      <div className="flex items-center gap-2">
+                                          <span className="text-yellow-500 font-black italic">x{item.quantidade || 1}</span>
+                                          <span className="uppercase text-zinc-200">{item.nome}</span>
+                                      </div>
+                                      <span className="text-zinc-400">R$ {((item.preco || 0) * (item.quantidade || 1)).toFixed(2)}</span>
                                   </div>
-                                  <span className="text-zinc-400">R$ {((item.preco || 0) * (item.quantidade || 1)).toFixed(2)}</span>
-                              </div>
-                          ))
-                      ) : (
-                          <p className="text-zinc-600 italic text-xs font-bold text-center py-4">Nenhum detalhe de item guardado nesta venda antiga.</p>
-                      )}
-                  </div>
+                              ))
+                          ) : (
+                              <p className="text-zinc-600 italic text-xs font-bold text-center py-4">Nenhum detalhe de item guardado nesta venda antiga.</p>
+                          )}
+                      </div>
 
-                  <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 space-y-1.5">
-                      <div className="flex justify-between text-xs font-bold text-zinc-400">
-                          <span>Custo de Insumos:</span>
-                          <span>R$ {Number(vendaDetalhe?.custo_total || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs font-bold text-green-500">
-                          <span>Lucro Líquido:</span>
-                          <span>R$ {Number(vendaDetalhe?.lucro_total || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="border-t border-zinc-800 pt-1.5 flex justify-between text-sm font-black text-yellow-500 italic">
-                          <span>VALOR PAGO:</span>
-                          <span>R$ {Number(vendaDetalhe?.total_venda || 0).toFixed(2)}</span>
+                      <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 space-y-1.5">
+                          <div className="flex justify-between text-xs font-bold text-zinc-400">
+                              <span>Custo de Insumos:</span>
+                              <span>R$ {Number(itemDetalheFinanceiro?.custo_total || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-bold text-green-500">
+                              <span>Lucro Líquido:</span>
+                              <span>R$ {Number(itemDetalheFinanceiro?.lucro_total || 0).toFixed(2)}</span>
+                          </div>
+                          <div className="border-t border-zinc-800 pt-1.5 flex justify-between text-sm font-black text-yellow-500 italic">
+                              <span>VALOR PAGO:</span>
+                              <span>R$ {Number(itemDetalheFinanceiro?.total_venda || 0).toFixed(2)}</span>
+                          </div>
                       </div>
                   </div>
-              </div>
+              )}
 
-              <button onClick={() => setVendaDetalhe(null)} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all">
+              <button onClick={() => setItemDetalheFinanceiro(null)} className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-black py-4 rounded-xl text-xs uppercase tracking-widest transition-all">
                   Fechar Ficha
               </button>
           </DialogContent>
       </Dialog>
 
-      {/* MODAL DE EDIÇÃO DE IDENTIFICAÇÃO DE MESA ABERTA */}
+      {/* MODAL DE EDIÇÃO DA MESA (NOME E NÚMERO) */}
       <Dialog open={modalEditarMesa} onOpenChange={setModalEditarMesa}>
           <DialogContent className="sm:max-w-[400px] bg-zinc-950 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-8 shadow-2xl">
               <DialogHeader>
@@ -2050,6 +2162,70 @@ export default function DashboardGlobal() {
 
               <button onClick={salvarEdicaoMesa} className="w-full bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-black py-4 rounded-xl text-sm uppercase italic tracking-tighter shadow-xl transition-all">
                   Confirmar Alteração
+              </button>
+          </DialogContent>
+      </Dialog>
+
+      {/* NOVO MODAL INTELIGENTE DE ADIÇÃO DE PESSOA OU MESCLAGEM COM MESAS ATIVAS */}
+      <Dialog open={modalAdicionarPessoa} onOpenChange={setModalAdicionarPessoa}>
+          <DialogContent className="sm:max-w-[450px] bg-zinc-950 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-8 shadow-2xl">
+              <DialogHeader>
+                  <DialogTitle className="text-2xl font-black uppercase text-yellow-500 italic text-center">Adicionar ao Grupo</DialogTitle>
+                  <DialogDescription className="text-center text-xs text-zinc-400 font-bold">
+                      Escolha como deseja adicionar registros à mesa {mesaSelecionada?.numero >= 1000 ? 'Avulsa' : mesaSelecionada?.numero}.
+                  </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800 my-4">
+                  <button 
+                      onClick={() => setTipoAdicaoPessoa("nova")} 
+                      className={`flex-1 py-3 rounded-lg font-black text-xs uppercase transition-all ${tipoAdicaoPessoa === "nova" ? 'bg-yellow-500 text-zinc-950 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                      Nova Pessoa
+                  </button>
+                  <button 
+                      onClick={() => setTipoAdicaoPessoa("mesclar")} 
+                      className={`flex-1 py-3 rounded-lg font-black text-xs uppercase transition-all ${tipoAdicaoPessoa === "mesclar" ? 'bg-yellow-500 text-zinc-950 shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                      Mesclar Ativa
+                  </button>
+              </div>
+
+              {tipoAdicaoPessoa === "nova" ? (
+                  <div className="space-y-4 my-2 text-left animate-in fade-in">
+                      <div className="space-y-2">
+                          <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest">Nome do Consumidor Independente</Label>
+                          <Input 
+                              value={inputNovoNomePessoa} 
+                              onChange={e => setInputNovoNomePessoa(e.target.value)} 
+                              placeholder="EX: CLAUDIA" 
+                              className="bg-zinc-900 border-zinc-800 font-black text-center text-zinc-200 h-12 rounded-xl uppercase" 
+                          />
+                      </div>
+                      <p className="text-[10px] text-zinc-500 italic text-center">Criará uma nova sub-aba mantendo os consumos totalmente paralelos na mesa.</p>
+                  </div>
+              ) : (
+                  <div className="space-y-4 my-2 text-left animate-in fade-in">
+                      <div className="space-y-2">
+                          <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest">Selecione a Comanda de Origem</Label>
+                          <select 
+                              value={selecaoMesaMesclar} 
+                              onChange={e => setSelecaoMesaMesclar(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-800 h-12 rounded-xl px-4 text-zinc-200 font-bold uppercase text-xs outline-none focus:border-yellow-500"
+                          >
+                              <option value="">Escolha uma mesa aberta...</option>
+                              {mesasReais.filter((m: any) => m.status === 'ocupada' && m.id !== mesaSelecionada?.id).map((mesaAtiva: any) => {
+                                  const rotulo = mesaAtiva.numero >= 1000 ? `Avulso: ${mesaAtiva.cliente}` : `Mesa ${mesaAtiva.numero} - ${mesaAtiva.cliente}`;
+                                  return <option key={mesaAtiva.id} value={mesaAtiva.id}>{rotulo}</option>;
+                              })}
+                          </select>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 italic text-center">Os itens da mesa selecionada serão migrados para cá de forma intacta e a mesa original será encerrada.</p>
+                  </div>
+              )}
+
+              <button onClick={confirmarAdicaoOuFusaoPessoa} className="w-full mt-4 bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-black py-4 rounded-xl text-sm uppercase italic tracking-tighter shadow-xl transition-all">
+                  {tipoAdicaoPessoa === "nova" ? "Criar Aba Independente" : "Confirmar Mesclagem"}
               </button>
           </DialogContent>
       </Dialog>
@@ -2143,13 +2319,13 @@ export default function DashboardGlobal() {
                 <div className="flex gap-2 items-center mt-2">
                     <select value={ingredienteTemp.insumo_id} onChange={e => setIngredienteTemp({...ingredienteTemp, insumo_id: e.target.value})} className="flex-1 bg-zinc-900 border border-zinc-800 h-12 rounded-xl px-4 text-zinc-200 text-xs font-bold outline-none truncate min-w-[120px]">
                         <option value="">Selecione o Insumo no Estoque...</option>
-                        {insumosBase.map(i => <option key={i.id} value={i.id}>{i.nome} (Estoque em {i.unidade})</option>)}
+                        {insumosBase.map((i: any) => <option key={i.id} value={i.id}>{i.nome} (Estoque em {i.unidade})</option>)}
                      </select>
                   
                     <div className="relative w-24 shrink-0">
                         <Input placeholder="Qtd" value={ingredienteTemp.qtd} onChange={e => setIngredienteTemp({...ingredienteTemp, qtd: e.target.value})} className="bg-zinc-900 border-zinc-800 h-12 rounded-xl text-center font-bold text-xs w-full pr-6" />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-zinc-500 uppercase pointer-events-none">
-                            {insumosBase.find(i => i.id === ingredienteTemp.insumo_id)?.unidade || ''}
+                            {insumosBase.find((i: any) => i.id === ingredienteTemp.insumo_id)?.unidade || ''}
                         </span>
                     </div>
                     
@@ -2157,7 +2333,7 @@ export default function DashboardGlobal() {
                </div>
                 
                 <div className="space-y-2 mt-4 max-h-[150px] overflow-y-auto pr-2 scrollbar-hide">
-                    {receitaTemp.length === 0 ? <p className="text-xs text-zinc-600 italic">Nenhum ingrediente vinculado.</p> : receitaTemp.map((ing, idx) => (
+                    {receitaTemp.length === 0 ? <p className="text-xs text-zinc-600 italic">Nenhum ingrediente vinculado.</p> : receitaTemp.map((ing: any, idx: number) => (
                         <div key={idx} className="flex justify-between items-center bg-zinc-900 p-3 rounded-lg border border-zinc-800">
                             <span className="text-xs font-bold uppercase text-zinc-300">{ing.nome}</span>
                               <div className="flex items-center gap-4">
@@ -2212,8 +2388,8 @@ export default function DashboardGlobal() {
         <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-50 rounded-[2.5rem] p-10 shadow-2xl">
             <DialogTitle className="text-3xl font-black text-red-500 uppercase italic tracking-tighter">{perdaEmEdicao ? "Editar Perda" : "Registrar Perda / Quebra"}</DialogTitle>
             <div className="space-y-6 mt-8">
-                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Insumo Perdido</Label><select value={novaPerda.insumo_id} onChange={e => setNovaPerda({...novaPerda, insumo_id: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 h-14 rounded-xl px-4 text-zinc-200 font-bold outline-none"><option value="">Selecione o Insumo...</option>{insumosBase.map(i => <option key={i.id} value={i.id}>{i.nome} ({i.unidade})</option>)}</select></div>
-                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Quantidade Perdida ({insumosBase.find(i => i.id === novaPerda.insumo_id)?.unidade || 'UN / G / ML'})</Label><Input value={novaPerda.quantidade} onChange={e => setNovaPerda({...novaPerda, quantidade: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
+                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Insumo Perdido</Label><select value={novaPerda.insumo_id} onChange={e => setNovaPerda({...novaPerda, insumo_id: e.target.value})} className="w-full bg-zinc-950 border border-zinc-800 h-14 rounded-xl px-4 text-zinc-200 font-bold outline-none"><option value="">Selecione o Insumo...</option>{insumosBase.map((i: any) => <option key={i.id} value={i.id}>{i.nome} ({i.unidade})</option>)}</select></div>
+                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px]">Quantidade Perdida ({insumosBase.find((i: any) => i.id === novaPerda.insumo_id)?.unidade || 'UN / G / ML'})</Label><Input value={novaPerda.quantidade} onChange={e => setNovaPerda({...novaPerda, quantidade: e.target.value})} className="bg-zinc-950 border-zinc-800 h-14 rounded-xl font-bold" /></div>
             </div>
             <button onClick={registrarPerda} className="w-full mt-10 bg-red-600 text-zinc-50 font-black py-5 rounded-[1.5rem] text-xl italic shadow-xl hover:bg-red-500 transition-all">{perdaEmEdicao ? "Salvar Alterações" : "Confirmar Prejuízo"}</button>
         </DialogContent>
@@ -2271,9 +2447,9 @@ export default function DashboardGlobal() {
                               </button>
                           ))}
                           <button 
-                              onClick={adicionarPessoaAMesaAberta}
+                              onClick={() => { setTipoAdicaoPessoa("nova"); setInputNovoNomePessoa(""); setSelecaoMesaMesclar(""); setModalAdicionarPessoa(true); }}
                               className="px-3 py-2 text-xs font-bold text-yellow-500 hover:bg-yellow-500/10 rounded-t-lg flex items-center gap-1 shrink-0 ml-auto transition-colors"
-                              title="Adicionar pessoa independente nesta mesa"
+                              title="Adicionar pessoa ou mesclar comanda nesta mesa"
                           >
                               <Plus size={14} /> Pessoa
                           </button>
@@ -2336,7 +2512,7 @@ export default function DashboardGlobal() {
         </div>
       </SheetContent></Sheet>
       
-      <Dialog open={modalConfirmacaoAberto} onOpenChange={setModalConfirmacaoAberto}><DialogContent className="sm:max-w-[450px] bg-zinc-950 border-zinc-800 text-zinc-50 p-0 rounded-[2.5rem] overflow-hidden shadow-2xl"><div className="p-8 border-b border-zinc-800 bg-zinc-900/50 text-center"><DialogTitle className="text-2xl font-black text-yellow-500 uppercase italic">Conferir Envio</DialogTitle><Badge className="mt-3 bg-yellow-500 text-zinc-950 font-black uppercase italic">MESA {inputMesaNova || mesaSelecionada?.numero}</Badge></div><div className="p-8 flex-1 overflow-y-auto max-h-[300px] bg-zinc-950/50 space-y-3">{pedidoAtual.map(item => (<div key={item.id} className="flex justify-between items-center bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50"><div className="flex items-center gap-4"><span className="text-2xl font-black text-yellow-500 italic">x{item.quantidade}</span><span className="font-black uppercase tracking-tighter leading-none">{item.nome}</span></div><span className="text-zinc-500 font-bold text-xs uppercase">R$ {(item.preco * item.quantidade).toFixed(2)}</span></div>))}</div><div className="p-8 border-t border-zinc-800 bg-zinc-900/80"><div className="flex justify-between items-end mb-4"><span className="text-zinc-600 font-black uppercase text-[10px] tracking-[0.2em] ml-1">Total Remessa</span><span className="text-4xl font-black text-yellow-500 italic leading-none">R$ {pedidoAtual.reduce((acc, i) => acc + (i.preco * i.quantidade), 0).toFixed(2)}</span></div><button onClick={() => confirmarEEnviarPedido()} className="w-full bg-yellow-500 text-zinc-950 font-black py-5 rounded-[1.5rem] uppercase italic tracking-tighter shadow-xl hover:bg-yellow-400 transition-all">Confirmar Envio</button></div></DialogContent></Dialog>
+      <Dialog open={modalConfirmacaoAberto} onOpenChange={setModalConfirmacaoAberto}><DialogContent className="sm:max-w-[450px] bg-zinc-950 border-zinc-800 text-zinc-50 p-0 rounded-[2.5rem] overflow-hidden shadow-2xl"><div className="p-8 border-b border-zinc-800 bg-zinc-900/50 text-center"><DialogTitle className="text-2xl font-black text-yellow-500 uppercase italic">Conferir Envio</DialogTitle><Badge className="mt-3 bg-yellow-500 text-zinc-950 font-black uppercase italic">MESA {inputMesaNova || mesaSelecionada?.numero}</Badge></div><div className="p-8 flex-1 overflow-y-auto max-h-[300px] bg-zinc-950/50 space-y-3">{pedidoAtual.map((item: any) => (<div key={item.id} className="flex justify-between items-center bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50"><div className="flex items-center gap-4"><span className="text-2xl font-black text-yellow-500 italic">x{item.quantidade}</span><span className="font-black uppercase tracking-tighter leading-none">{item.nome}</span></div><span className="text-zinc-500 font-bold text-xs uppercase">R$ {(item.preco * item.quantidade).toFixed(2)}</span></div>))}</div><div className="p-8 border-t border-zinc-800 bg-zinc-900/80"><div className="flex justify-between items-end mb-4"><span className="text-zinc-600 font-black uppercase text-[10px] tracking-[0.2em] ml-1">Total Remessa</span><span className="text-4xl font-black text-yellow-500 italic leading-none">R$ {pedidoAtual.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0).toFixed(2)}</span></div><button onClick={() => confirmarEEnviarPedido()} className="w-full bg-yellow-500 text-zinc-950 font-black py-5 rounded-[1.5rem] uppercase italic tracking-tighter shadow-xl hover:bg-yellow-400 transition-all">Confirmar Envio</button></div></DialogContent></Dialog>
     </div>
   );
 }
