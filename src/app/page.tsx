@@ -7,7 +7,7 @@ import {
   CheckCircle, ListOrdered, CreditCard, ChevronRight, 
   Banknote, QrCode, SmartphoneNfc, ChefHat, Clock, Check, GlassWater,
   PackageSearch, TrendingUp, AlertTriangle, Edit, BarChart3, BrainCircuit, 
-  DollarSign, Sparkles, Tag, Printer, Calendar as CalendarIcon, Filter, History, PlusCircle, User, Trash2, AlertOctagon, LogIn, Users, UserPlus, BookOpen, CheckSquare
+  DollarSign, Sparkles, Tag, Printer, Calendar as CalendarIcon, Filter, History, PlusCircle, User, Trash2, AlertOctagon, LogIn, Users, UserPlus, BookOpen, CheckSquare, RefreshCw
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -74,6 +74,7 @@ export default function DashboardGlobal() {
   const [insumoEmEdicao, setInsumoEmEdicao] = useState<string | null>(null);
   const [novoInsumo, setNovoInsumo] = useState({ nome: "", formato: "unidade", custo_formato: "", qtd_comprada: "", rendimento: "" });
 
+  // CORREÇÃO CIRÚRGICA APLICADA AQUI: Nomes isolados perfeitamente
   const [modalNovaPerda, setModalNovaPerda] = useState(false);
   const [perdaEmEdicao, setPerdaEmEdicao] = useState<any>(null);
   const [novaPerda, setNovaPerda] = useState({ insumo_id: "", quantidade: "" });
@@ -85,6 +86,10 @@ export default function DashboardGlobal() {
   const [modalGerenciarFiado, setModalGerenciarFiado] = useState(false);
   const [fiadoEmEdicao, setFiadoEmEdicao] = useState<any>(null);
   const [itensSelecionadosFiado, setItensSelecionadosFiado] = useState<number[]>([]);
+
+  // ================= ESTADOS DO MODO OFFLINE / PWA =================
+  const [isOffline, setIsOffline] = useState(false);
+  const [syncQueue, setSyncQueue] = useState<any[]>([]);
 
   useEffect(() => { 
     if (usuarioAtual) {
@@ -98,13 +103,143 @@ export default function DashboardGlobal() {
     }
   }, [usuarioAtual]);
 
+  // Inicialização do Modo Offline e Service Worker
+  useEffect(() => {
+    const savedQueue = localStorage.getItem('pdv_offline_queue');
+    if (savedQueue) {
+      try { setSyncQueue(JSON.parse(savedQueue)); } catch(e){}
+    }
+
+    const checkStatus = () => setIsOffline(!navigator.onLine);
+    checkStatus();
+
+    window.addEventListener('online', checkStatus);
+    window.addEventListener('offline', checkStatus);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW reg erro', err));
+    }
+
+    return () => {
+      window.removeEventListener('online', checkStatus);
+      window.removeEventListener('offline', checkStatus);
+    };
+  }, []);
+
+  const registrarAcaoOffline = (acao: { tipo: string, payload: any, descricao: string }) => {
+    const novaFila = [...syncQueue, { ...acao, id_acao: Date.now().toString() }];
+    setSyncQueue(novaFila);
+    localStorage.setItem('pdv_offline_queue', JSON.stringify(novaFila));
+  };
+
+  const sincronizarFilaOffline = async () => {
+    if (syncQueue.length === 0) return alert("Nenhuma ação pendente na fila.");
+    if (!navigator.onLine) return alert("O sistema ainda está sem conexão com a internet. Roteie a internet para sincronizar.");
+
+    const filaParaProcessar = [...syncQueue];
+    let sucessoCount = 0;
+
+    for (const acao of filaParaProcessar) {
+        try {
+            if (acao.tipo === 'INICIAR_ATENDIMENTO') {
+                const { novaMesa, inputMesaNova, inputNomeCliente, tipoAtendimento } = acao.payload;
+                if (tipoAtendimento === "mesa") {
+                    const { data: mExiste } = await supabase.from('mesas').select('id').eq('numero', inputMesaNova).maybeSingle();
+                    if (mExiste) {
+                        await supabase.from('mesas').update({ status: 'ocupada', cliente: inputNomeCliente }).eq('numero', inputMesaNova);
+                    } else {
+                        await supabase.from('mesas').insert([{ numero: parseInt(inputMesaNova), status: 'ocupada', cliente: inputNomeCliente, total: novaMesa.total || 0, itens: novaMesa.itens || [] }]);
+                    }
+                } else {
+                    await supabase.from('mesas').insert([{ numero: novaMesa.numero, status: 'ocupada', cliente: novaMesa.cliente, total: novaMesa.total || 0, itens: novaMesa.itens || [] }]);
+                }
+            }
+            else if (acao.tipo === 'ENVIAR_PEDIDO') {
+                const { mesaNumero, totalNovo, itensAtualizados, pedidoAtual } = acao.payload;
+                await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('numero', mesaNumero);
+                
+                // Abate o estoque na nuvem calculando o valor em tempo real e aceitando negativos (-1, -2, etc)
+                for (const item of pedidoAtual) {
+                    const p = produtosBase.find(pb => pb.id === item.id);
+                    if (p && p.receita && Array.isArray(p.receita)) {
+                        for (const ing of p.receita) {
+                            const { data: insumo } = await supabase.from('insumos').select('*').eq('id', ing.insumo_id).maybeSingle();
+                            if (insumo) {
+                                let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
+                                const novoEstoque = insumo.estoque - qtdUsada; // Desce livremente abaixo de 0
+                                await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
+                            }
+                        }
+                    }
+                }
+            }
+            else if (acao.tipo === 'FINALIZAR_PAGAMENTO') {
+                const { totalVenda, custoVenda, lucroVenda, nomeCliente, mesaNum, mesaNumero } = acao.payload;
+                await supabase.from('vendas').insert([{ total_venda: totalVenda, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: nomeCliente, mesa_numero: mesaNum }]);
+                await supabase.from('mesas').delete().eq('numero', mesaNumero);
+            }
+            else if (acao.tipo === 'FINALIZAR_FIADO') {
+                const { nomeCliente, totalFiadoAtual, itensMesa, mesaNumero } = acao.payload;
+                const { data: fiadoExistente } = await supabase.from('fiados').select('*').ilike('cliente_nome', nomeCliente).maybeSingle();
+                if (fiadoExistente) {
+                    const novoTotal = parseFloat(Number(fiadoExistente.total + totalFiadoAtual).toFixed(2));
+                    let itensMesclados = [...fiadoExistente.itens];
+                    itensMesa.forEach((itemNovo: any) => {
+                        const index = itensMesclados.findIndex((i: any) => i.id === itemNovo.id);
+                        if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; } 
+                        else { itensMesclados.push({ ...itemNovo }); }
+                    });
+                    await supabase.from('fiados').update({ total: novoTotal, itens: itensMesclados }).eq('id', fiadoExistente.id);
+                } else {
+                    await supabase.from('fiados').insert([{ cliente_nome: nomeCliente, total: totalFiadoAtual, itens: itensMesa }]);
+                }
+                await supabase.from('mesas').delete().eq('numero', mesaNumero);
+            }
+            else if (acao.tipo === 'RECEBER_FIADO') {
+                const { fiadoId, clienteNome, totalPago, custoPago, lucroPago, itensRestantesAgrupados, novoTotal } = acao.payload;
+                await supabase.from('vendas').insert([{ total_venda: totalPago, custo_total: custoPago, lucro_total: lucroPago, cliente_nome: `Fiado Pago: ${clienteNome}`, mesa_numero: 0 }]);
+                
+                const { data: fiadoNuvem } = await supabase.from('fiados').select('id').ilike('cliente_nome', clienteNome).maybeSingle();
+                const targetId = fiadoNuvem ? fiadoNuvem.id : fiadoId;
+
+                if (itensRestantesAgrupados.length === 0) {
+                    await supabase.from('fiados').delete().eq('id', targetId);
+                } else {
+                    await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', targetId);
+                }
+            }
+
+            sucessoCount++;
+        } catch (err) {
+            console.error("Erro na sincronização:", acao, err);
+        }
+    }
+
+    setSyncQueue([]);
+    localStorage.removeItem('pdv_offline_queue');
+    
+    buscarMesas();
+    buscarVendas();
+    buscarInsumos();
+    buscarFiados();
+
+    alert(`Sincronização concluída! ${sucessoCount} de ${filaParaProcessar.length} ordens despachadas para a nuvem.`);
+  };
+
+  const limparFilaOffline = () => {
+    if (confirm("ATENÇÃO: Deseja realmente descartar as ações pendentes na fila offline?")) {
+        setSyncQueue([]);
+        localStorage.removeItem('pdv_offline_queue');
+    }
+  };
+
   const buscarProdutos = async () => { const { data } = await supabase.from('produtos').select('*').order('nome'); if (data) setProdutosBase(data); };
   const buscarMesas = async () => { const { data } = await supabase.from('mesas').select('*').order('numero'); if (data) setMesasReais(data); };
   const buscarVendas = async () => { const { data } = await supabase.from('vendas').select('*').order('data_venda', { ascending: false });
   if (data) setHistoricoVendas(data); };
   const buscarInsumos = async () => { const { data } = await supabase.from('insumos').select('*').order('nome');
   if (data) setInsumosBase(data); };
-  const buscarPerdas = async () => { const { data } = await supabase.from('perdas').select('*').order('data_perda', { ascending: false });
+  const buscarPerdas = async () => { const { data } = await supabase.from('perdas').select('*').order('perda_data', { ascending: false });
   if (data) setPerdasHistorico(data); };
   const buscarUsuarios = async () => { const { data } = await supabase.from('usuarios').select('*').order('nome');
   if (data) setUsuariosEquipe(data); };
@@ -116,8 +251,6 @@ export default function DashboardGlobal() {
     e.preventDefault();
     if (!loginUsuario || !loginSenha) return alert("Preencha email e senha.");
     try {
-        // 1. Autenticação nativa e segura via Supabase Auth (GoTrue)
-        // O password viaja no body do POST (fecha V-03) e gera um token JWT assinado (fecha V-04)
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
             email: loginUsuario,
             password: loginSenha
@@ -128,7 +261,6 @@ export default function DashboardGlobal() {
             return;
         }
         
-        // 2. Com o token JWT seguro propagado automaticamente, busca o perfil na tabela usuarios
         const { data: perfilData, error: perfilError } = await supabase
             .from('usuarios')
             .select('*')
@@ -151,14 +283,12 @@ export default function DashboardGlobal() {
     e.preventDefault();
     if (!regNome || !regEmail || !regSenha) return alert("Preencha todos os campos.");
     try {
-        // 1. Registra a credencial com hash seguro nativo (bcrypt) no Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: regEmail,
             password: regSenha
         });
         if (authError) throw authError;
 
-        // 2. Salva apenas os dados públicos do perfil na tabela usuarios (sem a coluna senha!)
         const { error } = await supabase.from('usuarios').insert([{ 
             nome: regNome, 
             email: regEmail, 
@@ -174,7 +304,7 @@ export default function DashboardGlobal() {
   };
 
   const efetuarLogout = async () => {
-    await supabase.auth.signOut(); // Destrói os tokens criptográficos da sessão atual
+    await supabase.auth.signOut(); 
     setUsuarioAtual(null); 
     setLoginUsuario(""); 
     setLoginSenha(""); 
@@ -344,7 +474,7 @@ export default function DashboardGlobal() {
         if (perdaEmEdicao) {
             let oldDeducao = perdaEmEdicao.quantidade;
             if (insumo.unidade === 'KG' || insumo.unidade === 'L') oldDeducao = perdaEmEdicao.quantidade / 1000;
-            const novoEstoque = Math.max(0, insumo.estoque + oldDeducao - deducaoEstoque);
+            const novoEstoque = insumo.estoque + oldDeducao - deducaoEstoque; // Sem travas
             const { error: errPerda } = await supabase.from('perdas').update({ insumo_id: insumo.id, nome_insumo: insumo.nome, quantidade: qtdPerdida, custo_perda: custoPerdido }).eq('id', perdaEmEdicao.id);
             if (errPerda) throw errPerda;
             const { error: errEst } = await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
@@ -352,7 +482,7 @@ export default function DashboardGlobal() {
         } else {
             const { error: errPerda } = await supabase.from('perdas').insert([{ insumo_id: insumo.id, nome_insumo: insumo.nome, quantidade: qtdPerdida, custo_perda: custoPerdido }]);
             if (errPerda) throw errPerda;
-            const novoEstoque = Math.max(0, insumo.estoque - deducaoEstoque);
+            const novoEstoque = insumo.estoque - deducaoEstoque; // Sem travas
             const { error: errEst } = await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
             if (errEst) throw errEst;
         }
@@ -365,14 +495,12 @@ export default function DashboardGlobal() {
   const salvarNovoUsuario = async () => {
     if (!novoMembro.nome || !novoMembro.email || !novoMembro.senha) return alert("Preencha todos os campos.");
     try {
-        // 1. Cria a credencial segura nativamente no Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: novoMembro.email,
             password: novoMembro.senha
         });
         if (authError) throw authError;
 
-        // 2. Salva o perfil na tabela usuarios sem expor a senha
         const { error } = await supabase.from('usuarios').insert([{ 
             nome: novoMembro.nome, 
             email: novoMembro.email, 
@@ -427,7 +555,6 @@ export default function DashboardGlobal() {
 
   // ================= LÓGICA DE FIADO =================
   const abrirGerenciadorFiado = (fiado: any) => {
-      // Desmembra os itens para exibição individual (1 a 1) para permitir pagamento fracionado
       const itensDesmembrados: any[] = [];
       fiado.itens.forEach((item: any) => {
           for (let i = 0; i < (item.quantidade || 1); i++) {
@@ -458,35 +585,63 @@ export default function DashboardGlobal() {
           alert("Selecione pelo menos um item para receber pagamento.");
           return;
       }
-      try {
-          const itensParaPagar = fiadoEmEdicao.itens.filter((_: any, idx: number) => itensSelecionadosFiado.includes(idx));
-          const itensRestantes = fiadoEmEdicao.itens.filter((_: any, idx: number) => !itensSelecionadosFiado.includes(idx));
-          
-          const totalPago = itensParaPagar.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
-          const lucroPago = parseFloat((totalPago * 0.60).toFixed(2));
-          const custoPago = parseFloat((totalPago - lucroPago).toFixed(2));
 
-          // 1. Lançar o financeiro (Venda)
+      const itensParaPagar = fiadoEmEdicao.itens.filter((_: any, idx: number) => itensSelecionadosFiado.includes(idx));
+      const itensRestantes = fiadoEmEdicao.itens.filter((_: any, idx: number) => !itensSelecionadosFiado.includes(idx));
+      
+      const totalPago = itensParaPagar.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
+      const lucroPago = parseFloat((totalPago * 0.60).toFixed(2));
+      const custoPago = parseFloat((totalPago - lucroPago).toFixed(2));
+
+      const itensRestantesAgrupados: any[] = [];
+      itensRestantes.forEach((item: any) => {
+          const existente = itensRestantesAgrupados.find(i => i.id === item.id);
+          if (existente) {
+              existente.quantidade += 1;
+          } else {
+              itensRestantesAgrupados.push({ ...item });
+          }
+      });
+
+      const novoTotal = itensRestantesAgrupados.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
+
+      // Despacho no Modo Offline
+      if (isOffline) {
+          const novaVendaLocal = {
+              id: Date.now(),
+              total_venda: totalPago,
+              custo_total: custoPago,
+              lucro_total: lucroPago,
+              cliente_nome: `Fiado Pago: ${fiadoEmEdicao.cliente_nome}`,
+              mesa_numero: 0,
+              data_venda: new Date().toISOString()
+          };
+          setHistoricoVendas(prev => [novaVendaLocal, ...prev]);
+
+          if (itensRestantesAgrupados.length === 0) {
+              setFiadosBase(prev => prev.filter(f => f.id !== fiadoEmEdicao.id));
+          } else {
+              setFiadosBase(prev => prev.map(f => f.id === fiadoEmEdicao.id ? { ...f, itens: itensRestantesAgrupados, total: novoTotal } : f));
+          }
+
+          registrarAcaoOffline({
+              tipo: 'RECEBER_FIADO',
+              payload: { fiadoId: fiadoEmEdicao.id, clienteNome: fiadoEmEdicao.cliente_nome, totalPago, custoPago, lucroPago, itensRestantesAgrupados, novoTotal },
+              descricao: `Receber Fiado R$ ${totalPago.toFixed(2)} (${fiadoEmEdicao.cliente_nome})`
+          });
+
+          setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
+          return;
+      }
+
+      try {
           const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalPago, custo_total: custoPago, lucro_total: lucroPago, cliente_nome: `Fiado Pago: ${fiadoEmEdicao.cliente_nome}`, mesa_numero: 0 }]);
           if (errVenda) throw errVenda;
 
-          // Reagrupa os itens restantes para não poluir o banco de dados
-          const itensRestantesAgrupados: any[] = [];
-          itensRestantes.forEach((item: any) => {
-              const existente = itensRestantesAgrupados.find(i => i.id === item.id);
-              if (existente) {
-                  existente.quantidade += 1;
-              } else {
-                  itensRestantesAgrupados.push({ ...item });
-              }
-          });
-
-          // 2. Atualizar ou Apagar o Fiado
           if (itensRestantesAgrupados.length === 0) {
               const { error: errDelete } = await supabase.from('fiados').delete().eq('id', fiadoEmEdicao.id);
               if (errDelete) throw errDelete;
           } else {
-              const novoTotal = itensRestantesAgrupados.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
               const { error: errUpdate } = await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', fiadoEmEdicao.id);
               if (errUpdate) throw errUpdate;
           }
@@ -525,10 +680,42 @@ export default function DashboardGlobal() {
         nomeCliente = nomeCliente.trim().toUpperCase();
     }
 
+    const totalFiadoAtual = parseFloat(Number(mesaSelecionada.total).toFixed(2));
+
+    // Despacho no Modo Offline
+    if (isOffline) {
+        setFiadosBase(prevFiados => {
+            const fiadoExistente = prevFiados.find(f => f.cliente_nome?.toLowerCase() === nomeCliente.toLowerCase());
+            if (fiadoExistente) {
+                const novoTotal = parseFloat(Number(fiadoExistente.total + totalFiadoAtual).toFixed(2));
+                let itensMesclados = [...fiadoExistente.itens];
+                mesaSelecionada.itens.forEach((itemNovo: any) => {
+                    const index = itensMesclados.findIndex((i: any) => i.id === itemNovo.id);
+                    if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; } 
+                    else { itensMesclados.push({ ...itemNovo }); }
+                });
+                return prevFiados.map(f => f.id === fiadoExistente.id ? { ...f, total: novoTotal, itens: itensMesclados } : f);
+            } else {
+                const novoFiado = { id: Date.now(), cliente_nome: nomeCliente, total: totalFiadoAtual, itens: mesaSelecionada.itens, data_criacao: new Date().toISOString() };
+                return [novoFiado, ...prevFiados];
+            }
+        });
+
+        setMesasReais(prev => prev.filter(m => m.numero !== mesaSelecionada.numero));
+
+        registrarAcaoOffline({
+            tipo: 'FINALIZAR_FIADO',
+            payload: { nomeCliente, totalFiadoAtual, itensMesa: mesaSelecionada.itens, mesaId: mesaSelecionada.id, mesaNumero: mesaSelecionada.numero },
+            descricao: `Lançar Fiado R$ ${totalFiadoAtual.toFixed(2)} para ${nomeCliente}`
+        });
+
+        setModalCheckoutAberto(false); 
+        setMesaSelecionada(null);
+        alert(`Ação gravada localmente (Offline) na conta de ${nomeCliente}!`);
+        return;
+    }
+
     try {
-        const totalFiadoAtual = parseFloat(Number(mesaSelecionada.total).toFixed(2));
-        
-        // 1. Verifica se já existe um fiado para esse cliente (ignorando maiúsculas/minúsculas)
         const { data: fiadoExistente, error: errBusca } = await supabase
             .from('fiados')
             .select('*')
@@ -538,7 +725,6 @@ export default function DashboardGlobal() {
         if (errBusca) throw errBusca;
 
         if (fiadoExistente) {
-            // Cliente já tem conta! Vamos mesclar os itens e somar o valor
             const novoTotal = parseFloat(Number(fiadoExistente.total + totalFiadoAtual).toFixed(2));
             let itensMesclados = [...fiadoExistente.itens];
 
@@ -558,14 +744,12 @@ export default function DashboardGlobal() {
             if (errUpdate) throw errUpdate;
 
         } else {
-            // Cliente não tem conta, cria um registro novo
             const { error: errInsert } = await supabase
                 .from('fiados')
                 .insert([{ cliente_nome: nomeCliente, total: totalFiadoAtual, itens: mesaSelecionada.itens }]);
             if (errInsert) throw errInsert;
         }
 
-        // 2. Apaga a mesa
         const { error: errMesa } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         if (errMesa) throw errMesa;
 
@@ -583,6 +767,32 @@ export default function DashboardGlobal() {
     const custoVenda = parseFloat((totalVenda - lucroVenda).toFixed(2));
     const mesaNum = mesaSelecionada.numero === "Avulso" ? 0 : parseInt(mesaSelecionada.numero) || 0;
     const nomeCliente = mesaSelecionada.cliente || "Consumidor";
+
+    // Despacho no Modo Offline
+    if (isOffline) {
+        setMesasReais(prev => prev.filter(m => m.numero !== mesaSelecionada.numero));
+        const novaVendaLocal = {
+            id: Date.now(),
+            total_venda: totalVenda,
+            custo_total: custoVenda,
+            lucro_total: lucroVenda,
+            cliente_nome: nomeCliente,
+            mesa_numero: mesaNum,
+            data_venda: new Date().toISOString()
+        };
+        setHistoricoVendas(prev => [novaVendaLocal, ...prev]);
+        
+        registrarAcaoOffline({
+            tipo: 'FINALIZAR_PAGAMENTO',
+            payload: { totalVenda, custoVenda, lucroVenda, nomeCliente, mesaNum, mesaId: mesaSelecionada.id, mesaNumero: mesaSelecionada.numero },
+            descricao: `Encerrar Pago R$ ${totalVenda.toFixed(2)} (Mesa ${mesaSelecionada.numero})`
+        });
+
+        setModalCheckoutAberto(false); 
+        setMesaSelecionada(null);
+        return;
+    }
+
     try {
         const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalVenda, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: nomeCliente, mesa_numero: mesaNum }]);
         if (errVenda) throw errVenda;
@@ -591,8 +801,7 @@ export default function DashboardGlobal() {
         if (errMesa) throw errMesa;
         
         setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); setTimeout(() => buscarVendas(), 400); 
-    } catch (err: any) { alert("ERRO SUPABASE (Vendas).");
-    }
+    } catch (err: any) { alert("ERRO SUPABASE (Vendas)."); }
   };
 
   const cancelarMesa = async (mesa: any, e: React.MouseEvent) => {
@@ -601,7 +810,7 @@ export default function DashboardGlobal() {
       alert("Apenas o gerente pode excluir uma mesa.");
       return;
     }
-    if (confirm(`ATENÇÃO: Deseja realmente excluir a Mesa ${mesa.numero}? \n\nTodos os pedidos serão apagados, o valor NÃO será contabilizado no financeiro e os insumos voltarão automaticamente ao estoque.`)) {
+    if (confirm(`ATENÇÃO: Deseja realmente excluir a Mesa ${mesa.numero}? \n\nTodos os pedidos serão apagados e o estoque retornado.`)) {
       try {
         if (mesa.itens && mesa.itens.length > 0) {
           for (const item of mesa.itens) {
@@ -623,9 +832,9 @@ export default function DashboardGlobal() {
 
         buscarMesas();
         buscarInsumos();
-        alert("Mesa excluída e estoque estornado com sucesso!");
+        alert("Mesa excluída com sucesso!");
       } catch(err: any) {
-        alert("Erro ao excluir mesa e estornar estoque.");
+        alert("Erro ao excluir mesa.");
       }
     }
   };
@@ -635,7 +844,7 @@ export default function DashboardGlobal() {
       alert("Apenas o gerente pode estornar itens da comanda.");
       return;
     }
-    if (confirm(`Deseja remover "${item.quantidade}x ${item.nome}" da comanda? \n\nO valor será descontado da mesa e o estoque será devolvido.`)) {
+    if (confirm(`Deseja remover "${item.quantidade}x ${item.nome}" da comanda?`)) {
       try {
         const p = produtosBase.find(pb => pb.id === item.id);
         if (p && p.receita && Array.isArray(p.receita)) {
@@ -660,7 +869,6 @@ export default function DashboardGlobal() {
         setMesaSelecionada({ ...mesa, itens: novosItens, total: novoTotal });
         buscarMesas();
         buscarInsumos();
-        alert("Item estornado com sucesso!");
       } catch(err: any) {
         alert("Erro ao estornar item.");
       }
@@ -687,27 +895,59 @@ export default function DashboardGlobal() {
     setTipoAtendimento("avulso"); setModalNovaComanda(true); };
 
   const iniciarAtendimento = async () => {
+    let novaMesa: any = null;
+    const numMesaParsed = parseInt(inputMesaNova) || 0;
+    const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ?
+      Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
+
+    if (tipoAtendimento === "mesa") {
+        const mesaExiste = mesasReais.find(m => m.numero.toString() === inputMesaNova);
+        if (mesaExiste) {
+            novaMesa = { ...mesaExiste, status: 'ocupada', cliente: inputNomeCliente };
+        } else {
+            novaMesa = { id: Date.now(), numero: numMesaParsed, status: 'ocupada', cliente: inputNomeCliente, total: 0, itens: [] };
+        }
+    } else {
+        novaMesa = { id: Date.now(), numero: prox, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] };
+    }
+
+    // Despacho no Modo Offline
+    if (isOffline) {
+        setMesasReais(prev => {
+            const existe = prev.find(m => m.numero === novaMesa.numero);
+            if (existe) return prev.map(m => m.numero === novaMesa.numero ? novaMesa : m);
+            return [...prev, novaMesa];
+        });
+        setMesaSelecionada(novaMesa);
+        setModalNovaComanda(false);
+        setPedidoAtual([]);
+        registrarAcaoOffline({
+            tipo: 'INICIAR_ATENDIMENTO',
+            payload: { novaMesa, tipoAtendimento, inputMesaNova, inputNomeCliente },
+            descricao: `Abertura da Mesa ${novaMesa.numero} (${novaMesa.cliente})`
+        });
+        setTimeout(() => { setBuscaProduto(""); setCategoriaAtiva("Todas"); setMenuLateralAberto(true); }, 150);
+        return;
+    }
+
     try {
-        let novaMesa = null;
+        let nMesa = null;
         if (tipoAtendimento === "mesa") {
             const mesaExiste = mesasReais.find(m => m.numero.toString() === inputMesaNova);
             if (mesaExiste) {
                 const { error } = await supabase.from('mesas').update({ status: 'ocupada', cliente: inputNomeCliente }).eq('numero', inputMesaNova);
-                if(error) throw error; novaMesa = { ...mesaExiste, status: 'ocupada', cliente: inputNomeCliente };
+                if(error) throw error; nMesa = { ...mesaExiste, status: 'ocupada', cliente: inputNomeCliente };
             } else {
                 const { data, error } = await supabase.from('mesas').insert([{ numero: parseInt(inputMesaNova), status: 'ocupada', cliente: inputNomeCliente, total: 0, itens: [] }]).select();
-                if(error) throw error; if (data) novaMesa = data[0];
+                if(error) throw error; if (data) nMesa = data[0];
             }
         } else {
-            const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ?
-            Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
             const { data, error } = await supabase.from('mesas').insert([{ numero: prox, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] }]).select();
-            if(error) throw error; if (data) novaMesa = data[0];
+            if(error) throw error; if (data) nMesa = data[0];
         }
-        setMesaSelecionada(novaMesa); setModalNovaComanda(false); setPedidoAtual([]); buscarMesas();
+        setMesaSelecionada(nMesa); setModalNovaComanda(false); setPedidoAtual([]); buscarMesas();
         setTimeout(() => { setBuscaProduto(""); setCategoriaAtiva("Todas"); setMenuLateralAberto(true); }, 150);
-    } catch (err: any) { alert("ERRO SUPABASE (Abertura de Mesa).");
-    }
+    } catch (err: any) { alert("ERRO SUPABASE (Abertura de Mesa)."); }
   };
 
   const adicionarItem = (p: any) => { setPedidoAtual(prev => { const e = prev.find(i => i.id === p.id); return e ? prev.map(i => i.id === p.id ? { ...i, quantidade: i.quantidade + 1 } : i) : [...prev, { ...p, quantidade: 1 }]; });
@@ -717,26 +957,62 @@ export default function DashboardGlobal() {
 
   // ================= INTEGRAÇÃO KDS E BAIXA ESTOQUE =================
   const confirmarEEnviarPedido = async () => {
-    try {
-        const numMesaApoio = mesaSelecionada?.numero || inputMesaNova || "Avulso";
-        const clienteApoio = mesaSelecionada?.cliente || inputNomeCliente || "Cliente";
-        if (pedidoAtual.length > 0) {
-            const novoPedidoCozinha = { id: Date.now().toString(), mesa: numMesaApoio, cliente: clienteApoio, itens: [...pedidoAtual], hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
-            setPedidosPendentes(prev => [...prev, novoPedidoCozinha]);
-            if (usuarioAtual?.role === 'gerente') tocarSomAlerta();
-        }
+    const numMesaApoio = mesaSelecionada?.numero || inputMesaNova || "Avulso";
+    const clienteApoio = mesaSelecionada?.cliente || inputNomeCliente || "Cliente";
+    
+    const totalRemessa = pedidoAtual.reduce((acc, i) => acc + (i.preco * i.quantidade), 0);
+    const totalNovo = (Number(mesaSelecionada?.total) || 0) + totalRemessa;
+    const itensAntigos = mesaSelecionada?.itens || [];
+    let itensAtualizados = [...itensAntigos];
+    pedidoAtual.forEach(itemNovo => {
+        const index = itensAtualizados.findIndex((i: any) => i.id === itemNovo.id);
+        if (index >= 0) { itensAtualizados[index].quantidade += itemNovo.quantidade; } 
+        else { itensAtualizados.push({ ...itemNovo }); }
+    });
 
-        const mesaId = mesaSelecionada?.id || mesasReais.find(m => m.numero == inputMesaNova)?.id;
-        const totalRemessa = pedidoAtual.reduce((acc, i) => acc + (i.preco * i.quantidade), 0);
-        const totalNovo = (Number(mesaSelecionada?.total) || 0) + totalRemessa;
-        
-        const itensAntigos = mesaSelecionada?.itens || [];
-        let itensAtualizados = [...itensAntigos];
-        pedidoAtual.forEach(itemNovo => {
-            const index = itensAtualizados.findIndex((i: any) => i.id === itemNovo.id);
-            if (index >= 0) { itensAtualizados[index].quantidade += itemNovo.quantidade; } 
-            else { itensAtualizados.push({ ...itemNovo }); }
+    if (pedidoAtual.length > 0) {
+        const novoPedidoCozinha = { id: Date.now().toString(), mesa: numMesaApoio, cliente: clienteApoio, itens: [...pedidoAtual], hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
+        setPedidosPendentes(prev => [...prev, novoPedidoCozinha]);
+        if (usuarioAtual?.role === 'gerente') tocarSomAlerta();
+    }
+
+    // Despacho no Modo Offline
+    if (isOffline) {
+        const mesaAtualizadaLocal = { ...mesaSelecionada, total: totalNovo, itens: itensAtualizados };
+        if (mesaSelecionada) setMesaSelecionada(mesaAtualizadaLocal);
+        setMesasReais(prev => prev.map(m => m.numero === mesaAtualizadaLocal.numero ? { ...m, total: totalNovo, itens: itensAtualizados } : m));
+
+        setInsumosBase(prevInsumos => {
+            let insumosCopia = [...prevInsumos];
+            for (const item of pedidoAtual) {
+                const p = produtosBase.find(pb => pb.id === item.id);
+                if (p && p.receita && Array.isArray(p.receita)) {
+                    for (const ing of p.receita) {
+                        const idx = insumosCopia.findIndex(i => i.id === ing.insumo_id);
+                        if (idx >= 0) {
+                            let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
+                            insumosCopia[idx] = { ...insumosCopia[idx], estoque: insumosCopia[idx].estoque - qtdUsada }; // Desce abaixo de 0 livremente
+                        }
+                    }
+                }
+            }
+            return insumosCopia;
         });
+
+        registrarAcaoOffline({
+            tipo: 'ENVIAR_PEDIDO',
+            payload: { mesaNumero: numMesaApoio, totalNovo, itensAtualizados, pedidoAtual },
+            descricao: `Lançar R$ ${totalRemessa.toFixed(2)} na Mesa ${numMesaApoio}`
+        });
+
+        setModalConfirmacaoAberto(false);
+        setMenuLateralAberto(false); 
+        setPedidoAtual([]);
+        return;
+    }
+
+    try {
+        const mesaId = mesaSelecionada?.id || mesasReais.find(m => m.numero == inputMesaNova)?.id;
         const { error: errMesa } = await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('id', mesaId);
         if(errMesa) throw errMesa;
         if (mesaSelecionada) setMesaSelecionada({ ...mesaSelecionada, total: totalNovo, itens: itensAtualizados });
@@ -748,7 +1024,7 @@ export default function DashboardGlobal() {
                   const insumo = insumosBase.find(i => i.id === ing.insumo_id);
                   if (insumo) {
                       let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
-                      const novoEstoque = Math.max(0, insumo.estoque - qtdUsada);
+                      const novoEstoque = insumo.estoque - qtdUsada; // Desce abaixo de 0
                       const { error: errEstoque } = await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
                       if (errEstoque) throw errEstoque;
                   }
@@ -841,7 +1117,10 @@ export default function DashboardGlobal() {
             <div className="h-12 w-12 relative rounded-full overflow-hidden border border-yellow-500/30 bg-black flex items-center justify-center">
                  <Image src="/logo.png" alt="Logo" fill className="object-contain p-1" />
             </div>
-            <div><h1 className="text-xl font-bold tracking-tight text-yellow-500 italic uppercase">Bar da Praça</h1><p className="text-xs text-zinc-400">Turno da Noite</p></div>
+            <div>
+                <h1 className="text-xl font-bold tracking-tight text-yellow-500 italic uppercase">Bar da Praça</h1>
+                <p className="text-xs text-zinc-400">Turno da Noite</p>
+            </div>
           </div>
           <div className="md:hidden flex flex-col items-end">
              <span className="text-[10px] font-black uppercase text-zinc-500 leading-tight">{usuarioAtual?.role}</span>
@@ -849,10 +1128,41 @@ export default function DashboardGlobal() {
           </div>
         </div>
 
+        {/* BANNER DE STATUS ONLINE / OFFLINE INTELIGENTE COM BOTÃO DE FORÇAR */}
+        <div className="flex items-center gap-3 bg-zinc-950 px-4 py-2 rounded-xl border border-zinc-800 w-full md:w-auto justify-center">
+            <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${isOffline ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`} />
+            
+            <div className="flex flex-col items-start leading-none">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-300">
+                    {isOffline ? 'Modo Local' : 'Online'}
+                </span>
+                <label className="flex items-center gap-1 cursor-pointer mt-0.5">
+                    <input type="checkbox" checked={isOffline} onChange={e => setIsOffline(e.target.checked)} className="accent-orange-500 w-2.5 h-2.5 bg-zinc-900 border-zinc-700 rounded cursor-pointer" />
+                    <span className="text-[9px] font-bold text-zinc-500 hover:text-zinc-300">Forçar Offline</span>
+                </label>
+            </div>
+
+            {syncQueue.length > 0 && (
+                <Badge className="bg-orange-500/10 text-orange-500 border border-orange-500/30 font-black text-[9px] px-1.5 ml-1">
+                    {syncQueue.length} PENDENTE{syncQueue.length > 1 ? 'S' : ''}
+                </Badge>
+            )}
+
+            {syncQueue.length > 0 && (
+                <div className="flex items-center gap-1 ml-1 pl-2 border-l border-zinc-800">
+                    <button onClick={sincronizarFilaOffline} className="bg-green-600 hover:bg-green-500 text-white px-2 py-1 rounded text-[9px] font-black uppercase transition-all shadow flex items-center gap-1">
+                        <RefreshCw size={8} /> Sync
+                    </button>
+                    <button onClick={limparFilaOffline} className="text-zinc-600 hover:text-red-500 p-1 transition-colors" title="Descartar Fila Local">
+                        <Trash2 size={12} />
+                    </button>
+                </div>
+            )}
+        </div>
+
         <nav className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-full md:w-auto overflow-x-auto">
           <button onClick={() => setVisaoAtiva("salao")} className={`flex-1 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all ${visaoAtiva === "salao" ? "bg-zinc-800 text-yellow-500 shadow-inner" : "text-zinc-500"}`}>Salão</button>
           
-          {/* BLOQUEIO DE SEGURANÇA PARA COLABORADORES */}
           {usuarioAtual?.role === 'gerente' && (
             <>
               <button onClick={() => setVisaoAtiva("gestao")} className={`flex-1 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all ${visaoAtiva === "gestao" ? "bg-zinc-800 text-yellow-500 shadow-inner" : "text-zinc-500"}`}>Gestão ERP</button>
