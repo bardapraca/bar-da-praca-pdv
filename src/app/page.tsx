@@ -65,7 +65,7 @@ export default function DashboardGlobal() {
   const [inputMesaNova, setInputMesaNova] = useState("");
   const [inputNomeCliente, setInputNomeCliente] = useState("");
 
-  // Nomes isolados para gestão de abas na mesma mesa
+  // Nomes isolados para gestão de abas na mesma mesa com vedação de vazamento
   const [pessoaAtivaMesa, setPessoaAtivaMesa] = useState<string>("Todos");
   const [modoFechamentoCheckout, setModoFechamentoCheckout] = useState<string>("Todos");
 
@@ -622,7 +622,7 @@ export default function DashboardGlobal() {
     if(insumo && ingredienteTemp.qtd) {
         let qtdConvertida = parseFloat(String(ingredienteTemp.qtd).replace(',','.'));
         let custoIngrediente = qtdConvertida * insumo.custo_unidade;
-        setReceitaTemp([...receitaTemp, { insumo_id: insumo.id, nome: insumo.nome, unidade: insumo.unidade, custo_unidade: insumo.custo_unidade, qtd: qtdConvertida, custo_calculado: custoIngrediente }]);
+        setReceitaTemp((prev: any[]) => [...prev, { insumo_id: insumo.id, nome: insumo.nome, unidade: insumo.unidade, custo_unidade: insumo.custo_unidade, qtd: qtdConvertida, custo_calculado: custoIngrediente }]);
         setIngredienteTemp({ insumo_id: "", qtd: "" });
     }
   };
@@ -718,6 +718,7 @@ export default function DashboardGlobal() {
               descricao: `Receber Fiado R$ ${totalPago.toFixed(2)} (${fiadoEmEdicao.cliente_nome})`
           });
 
+          setPessoaAtivaMesa("Todos");
           setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
           return;
       }
@@ -734,6 +735,7 @@ export default function DashboardGlobal() {
               if (errUpdate) throw errUpdate;
           }
 
+          setPessoaAtivaMesa("Todos");
           setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
           buscarFiados(); buscarVendas();
           alert("Pagamento de fiado recebido com sucesso!");
@@ -777,6 +779,7 @@ export default function DashboardGlobal() {
   const abrirCheckout = () => { 
     setFichaMesaAberta(false); 
     setModoFechamentoCheckout("Todos");
+    setPessoaAtivaMesa("Todos");
     handleSplitChange(1); 
     setTimeout(() => setModalCheckoutAberto(true), 200); 
   };
@@ -815,7 +818,7 @@ export default function DashboardGlobal() {
     }
   };
 
-  // Separa uma pessoa da mesa de volta para um avulso independente
+  // Separa uma pessoa da mesa de volta para um avulso independente de forma blindada
   const separarPessoaParaAvulso = async (nomePessoa: string) => {
     if (!mesaSelecionada) return;
     if (confirm(`Deseja realmente separar todos os pedidos de ${nomePessoa} para uma nova comanda independente?`)) {
@@ -829,11 +832,12 @@ export default function DashboardGlobal() {
       const nomesRestantes = nomesAtuais.filter(n => n !== nomePessoa);
       const novoClienteStr = nomesRestantes.join(" / ") || "Consumidor";
 
-      const proxNum = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ?
-        Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
+      // Atribui estritamente para a faixa de Avulso oculta (>= 1000)
+      const proxAvulso = mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
+        Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).map(m => m.numero)) + 1 : 1001;
 
       const novaMesaAvulsa = {
-        numero: proxNum,
+        numero: proxAvulso,
         status: 'ocupada',
         cliente: nomePessoa,
         total: totalSeparado,
@@ -846,8 +850,9 @@ export default function DashboardGlobal() {
         
         setMesasReais((prev: any[]) => [...prev.map(m => m.id === mesaSelecionada.id ? mesaOrigemAtualizada : m), novaMesaComId]);
         setMesaSelecionada(null);
+        setPessoaAtivaMesa("Todos");
         setFichaMesaAberta(false);
-        alert(`Comanda de ${nomePessoa} separada localmente para a Mesa ${proxNum}!`);
+        alert(`Comanda de ${nomePessoa} separada localmente como Avulso independente!`);
         return;
       }
 
@@ -856,9 +861,10 @@ export default function DashboardGlobal() {
         await supabase.from('mesas').insert([novaMesaAvulsa]);
 
         setMesaSelecionada(null);
+        setPessoaAtivaMesa("Todos");
         setFichaMesaAberta(false);
         buscarMesas();
-        alert(`Comanda de ${nomePessoa} separada com sucesso para a Mesa ${proxNum}!`);
+        alert(`Comanda de ${nomePessoa} separada com sucesso como Avulso independente!`);
       } catch (err) {
           alert("Erro ao separar comanda.");
       }
@@ -891,6 +897,7 @@ export default function DashboardGlobal() {
 
             setMesasReais((prev: any[]) => prev.filter(m => m.id !== mesaSelecionada.id).map(m => m.id === mesaDestino.id ? { ...m, total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr } : m));
             setMesaSelecionada(null);
+            setPessoaAtivaMesa("Todos");
             setFichaMesaAberta(false);
             setModalEditarMesa(false);
             alert(`Comanda unida localmente à Mesa ${novoNumParsed}!`);
@@ -903,6 +910,7 @@ export default function DashboardGlobal() {
             const mesaAtualizada = { ...mesaSelecionada, numero: novoNumParsed || numAntigo, cliente: novoNome, itens: itensAtualizados };
             setMesasReais((prev: any[]) => prev.map(m => m.id === mesaSelecionada.id ? mesaAtualizada : m));
             setMesaSelecionada(mesaAtualizada);
+            setPessoaAtivaMesa("Todos");
             setModalEditarMesa(false);
             alert("Identificação atualizada localmente!");
         }
@@ -928,6 +936,7 @@ export default function DashboardGlobal() {
             await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
             
             setMesaSelecionada(null);
+            setPessoaAtivaMesa("Todos");
             setFichaMesaAberta(false);
             setModalEditarMesa(false);
             buscarMesas();
@@ -941,6 +950,7 @@ export default function DashboardGlobal() {
             }
             await supabase.from('mesas').update({ numero: numFinal, cliente: novoNome, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
             setMesaSelecionada((prev: any) => ({ ...prev, numero: numFinal, cliente: novoNome, itens: itensAtualizados }));
+            setPessoaAtivaMesa("Todos");
             setModalEditarMesa(false);
             buscarMesas();
             alert("Identificação atualizada com sucesso!");
@@ -1003,6 +1013,7 @@ export default function DashboardGlobal() {
             descricao: `Lançar Fiado R$ ${totalFiadoAtual.toFixed(2)} para ${nomeCliente}`
         });
 
+        setPessoaAtivaMesa("Todos");
         setModalCheckoutAberto(false); 
         setMesaSelecionada(null);
         alert(`Ação gravada localmente (Offline) na conta de ${nomeCliente}!`);
@@ -1052,6 +1063,7 @@ export default function DashboardGlobal() {
             await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         }
 
+        setPessoaAtivaMesa("Todos");
         setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarFiados();
         alert(`Fiado salvo com sucesso na conta de ${nomeCliente}!`);
     } catch (err: any) {
@@ -1101,6 +1113,7 @@ export default function DashboardGlobal() {
             descricao: `Encerrar Pago R$ ${totalVenda.toFixed(2)} (${nomeCliente})`
         });
 
+        setPessoaAtivaMesa("Todos");
         setModalCheckoutAberto(false); 
         setMesaSelecionada(null);
         return;
@@ -1120,6 +1133,7 @@ export default function DashboardGlobal() {
             await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         }
         
+        setPessoaAtivaMesa("Todos");
         setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); setTimeout(() => buscarVendas(), 400); 
     } catch (err: any) { alert("ERRO SUPABASE (Vendas)."); }
   };
@@ -1130,7 +1144,7 @@ export default function DashboardGlobal() {
       alert("Apenas o gerente pode excluir uma mesa.");
       return;
     }
-    if (confirm(`ATENÇÃO: Deseja realmente excluir a Mesa ${mesa.numero}? \n\nTodos os pedidos serão apagados e o estoque retornado.`)) {
+    if (confirm(`ATENÇÃO: Deseja realmente excluir a comanda de ${mesa.cliente}? \n\nTodos os pedidos serão apagados e o estoque retornado.`)) {
       try {
         if (mesa.itens && mesa.itens.length > 0) {
           for (const item of mesa.itens) {
@@ -1152,9 +1166,9 @@ export default function DashboardGlobal() {
 
         buscarMesas();
         buscarInsumos();
-        alert("Mesa excluída com sucesso!");
+        alert("Comanda excluída com sucesso!");
       } catch(err: any) {
-        alert("Erro ao excluir mesa.");
+        alert("Erro ao excluir comanda.");
       }
     }
   };
@@ -1198,8 +1212,8 @@ export default function DashboardGlobal() {
   // ================= SALÃO E OPERAÇÕES =================
   const adicionarMesaSalao = async () => {
     try {
-        const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ?
-        Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
+        const prox = mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).length > 0 ?
+        Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).map(m => m.numero)) + 1 : 1;
         const { error } = await supabase.from('mesas').insert([{ numero: prox, status: 'livre', total: 0, itens: [] }]);
         if (error) throw error; buscarMesas();
     } catch (err: any) { alert("ERRO SUPABASE (Adicionar Mesa)."); }
@@ -1214,7 +1228,7 @@ export default function DashboardGlobal() {
     } else { 
         setMesaSelecionada(mesa); 
         const pessoas = getPessoasDaMesa(mesa);
-        setPessoaAtivaMesa(pessoas[0] || "Consumidor");
+        setPessoaAtivaMesa("Todos");
         setFichaMesaAberta(true); 
     }
   };
@@ -1225,8 +1239,12 @@ export default function DashboardGlobal() {
   const iniciarAtendimento = async () => {
     let novaMesa: any = null;
     const numMesaParsed = parseInt(inputMesaNova) || 0;
-    const prox = mesasReais.filter(m => typeof m.numero === 'number').length > 0 ?
-      Math.max(...mesasReais.map(m => m.numero)) + 1 : 1;
+    
+    const proxFisica = mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).length > 0 ?
+      Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero < 1000).map(m => m.numero)) + 1 : 1;
+      
+    const proxAvulso = mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
+      Math.max(...mesasReais.filter(m => typeof m.numero === 'number' && m.numero >= 1000).map(m => m.numero)) + 1 : 1001;
 
     if (tipoAtendimento === "mesa") {
         const mesaExiste = mesasReais.find(m => m.numero.toString() === inputMesaNova);
@@ -1236,7 +1254,7 @@ export default function DashboardGlobal() {
             novaMesa = { id: Date.now(), numero: numMesaParsed, status: 'ocupada', cliente: inputNomeCliente, total: 0, itens: [] };
         }
     } else {
-        novaMesa = { id: Date.now(), numero: prox, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] };
+        novaMesa = { id: Date.now(), numero: proxAvulso, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] };
     }
 
     if (isOffline) {
@@ -1248,10 +1266,11 @@ export default function DashboardGlobal() {
         setMesaSelecionada(novaMesa);
         setModalNovaComanda(false);
         setPedidoAtual([]);
+        setPessoaAtivaMesa("Todos");
         registrarAcaoOffline({
             tipo: 'INICIAR_ATENDIMENTO',
-            payload: { novaMesa, tipoAtendimento, inputMesaNova, inputNomeCliente },
-            descricao: `Abertura da Mesa ${novaMesa.numero} (${novaMesa.cliente})`
+            payload: { novaMesa, tipoAtendimento, inputMesaNova: novaMesa.numero.toString(), inputNomeCliente },
+            descricao: `Abertura da ${tipoAtendimento === 'avulso' ? 'Comanda Avulsa' : 'Mesa ' + novaMesa.numero} (${novaMesa.cliente})`
         });
         setTimeout(() => { setBuscaProduto(""); setCategoriaAtiva("Todas"); setMenuLateralAberto(true); }, 150);
         return;
@@ -1265,14 +1284,18 @@ export default function DashboardGlobal() {
                 const { error } = await supabase.from('mesas').update({ status: 'ocupada', cliente: inputNomeCliente }).eq('numero', inputMesaNova);
                 if(error) throw error; nMesa = { ...mesaExiste, status: 'ocupada', cliente: inputNomeCliente };
             } else {
-                const { data, error } = await supabase.from('mesas').insert([{ numero: parseInt(inputMesaNova), status: 'ocupada', cliente: inputNomeCliente, total: 0, itens: [] }]).select();
+                const { data, error } = await supabase.from('mesas').insert([{ numero: numMesaParsed, status: 'ocupada', cliente: inputNomeCliente, total: 0, itens: [] }]).select();
                 if(error) throw error; if (data) nMesa = data[0];
             }
         } else {
-            const { data, error } = await supabase.from('mesas').insert([{ numero: prox, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] }]).select();
+            const { data, error } = await supabase.from('mesas').insert([{ numero: proxAvulso, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] }]).select();
             if(error) throw error; if (data) nMesa = data[0];
         }
-        setMesaSelecionada(nMesa); setModalNovaComanda(false); setPedidoAtual([]); buscarMesas();
+        setMesaSelecionada(nMesa); 
+        setModalNovaComanda(false); 
+        setPedidoAtual([]); 
+        setPessoaAtivaMesa("Todos");
+        buscarMesas();
         setTimeout(() => { setBuscaProduto(""); setCategoriaAtiva("Todas"); setMenuLateralAberto(true); }, 150);
     } catch (err: any) { alert("ERRO SUPABASE (Abertura de Mesa)."); }
   };
@@ -1290,7 +1313,6 @@ export default function DashboardGlobal() {
     const itensAntigos = mesaSelecionada?.itens || [];
     let itensAtualizados = [...itensAntigos];
     
-    // Anexa a pessoa ativa da mesa como dona do produto lançado
     pedidoAtual.forEach(itemNovo => {
         const donoNovo = pessoaAtivaMesa === "Todos" ? (getPessoasDaMesa(mesaSelecionada)[0] || "Consumidor") : pessoaAtivaMesa;
         const index = itensAtualizados.findIndex((i: any) => i.id === itemNovo.id && (i.dono || "Consumidor") === donoNovo);
@@ -1332,7 +1354,7 @@ export default function DashboardGlobal() {
         registrarAcaoOffline({
             tipo: 'ENVIAR_PEDIDO',
             payload: { mesaNumero: numMesaApoio, totalNovo, itensAtualizados, pedidoAtual },
-            descricao: `Lançar R$ ${totalRemessa.toFixed(2)} na Mesa ${numMesaApoio}`
+            descricao: `Lançar R$ ${totalRemessa.toFixed(2)} na Comanda ${numMesaApoio}`
         });
 
         setModalConfirmacaoAberto(false);
@@ -1371,7 +1393,6 @@ export default function DashboardGlobal() {
     return matchBusca && matchCat;
   });
 
-  // Filtros de visualização granular para as abas de consumo da mesa ocupada
   const itensExibidosMesa = useMemo(() => {
     if (!mesaSelecionada?.itens) return [];
     if (pessoaAtivaMesa === "Todos") return mesaSelecionada.itens;
@@ -1467,7 +1488,6 @@ export default function DashboardGlobal() {
           </div>
         </div>
 
-        {/* BANNER DE STATUS ONLINE / OFFLINE INTELIGENTE COM BOTÃO DE FORÇAR */}
         <div className="flex items-center gap-3 bg-zinc-950 px-4 py-2 rounded-xl border border-zinc-800 w-full md:w-auto justify-center">
             <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${isOffline ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`} />
             
@@ -1604,7 +1624,7 @@ export default function DashboardGlobal() {
                                 {v.isConsolidated ? (
                                  <div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-black text-yellow-500 print:border-zinc-300 print:bg-white"><CalendarIcon size={16}/></div><div><p className="font-black text-zinc-200 uppercase text-xs print:text-black">{v.key}</p><p className="text-[10px] text-zinc-500">{v.count} Mesas Fechadas</p></div></div>
                                 ) : (
-                                 <div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-black text-yellow-500 print:border-zinc-300 print:bg-white"><Receipt size={16}/></div><div><p className="font-black text-zinc-200 uppercase text-xs print:text-black">{v.cliente_nome}</p><p className="text-[10px] text-zinc-500">{new Date(v.data_venda).toLocaleTimeString()} - Mesa {v.mesa_numero || 'Avulsa'}</p></div></div>
+                                 <div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-black text-yellow-500 print:border-zinc-300 print:bg-white"><Receipt size={16}/></div><div><p className="font-black text-zinc-200 uppercase text-xs print:text-black">{v.cliente_nome}</p><p className="text-[10px] text-zinc-500">{new Date(v.data_venda).toLocaleTimeString()} - Comanda {v.mesa_numero || 'Avulsa'}</p></div></div>
                                 )}
                                 <div className="text-right"><p className="font-black text-white print:text-black">R$ {v.isConsolidated ? v.total.toFixed(2) : Number(v.total_venda).toFixed(2)}</p></div>
                             </div>
@@ -1740,7 +1760,7 @@ export default function DashboardGlobal() {
         </main>
       )}
 
-      {/* SALÃO - COM BOTÃO NOVO ATENDIMENTO E KDS */}
+      {/* SALÃO COM SEPARAÇÃO INTELIGENTE DE MESAS VS AVULSOS */}
       {visaoAtiva === "salao" && (
         <main className="p-6 max-w-7xl mx-auto space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -1754,17 +1774,33 @@ export default function DashboardGlobal() {
                 <button onClick={abrirNovoAtendimento} className="bg-zinc-900 text-zinc-400 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:text-yellow-500 transition-all shadow-xl"><PlusCircle size={16}/> NOVO ATENDIMENTO</button>
             </div>
           </div>
+          
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-             {mesasReais.map((m) => (
+             {mesasReais.map((m) => {
+              const isAvulso = typeof m.numero === 'number' && m.numero >= 1000;
+              return (
               <div key={m.id} onClick={() => interagirComMesa(m)} className={`p-6 rounded-[2rem] border h-44 flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.03] active:scale-95 shadow-lg ${m.status === 'livre' ? 'bg-zinc-900/40 border-zinc-800' : 'bg-yellow-500/10 border-yellow-500/50 shadow-yellow-500/5'}`}>
                 <div className="flex justify-between items-start">
-                    <span className={`text-4xl font-black italic tracking-tighter ${m.status === 'livre' ? 'text-zinc-700' : 'text-yellow-500'}`}>
-                        {m.numero.toString().padStart(2, '0')}
-                    </span>
-                    <div className="flex items-center gap-2">
-                        {m.status === 'ocupada' && <Badge className="bg-yellow-500 text-zinc-950 font-black text-[10px] uppercase max-w-[80px] truncate">{m.cliente}</Badge>}
+                    
+                    {/* EXIBIÇÃO GRANULAR: HIDE NUMERO PARA AVULSOS */}
+                    {isAvulso ? (
+                        <span className="text-xl font-black italic tracking-tighter text-yellow-500 truncate max-w-[140px]" title={m.cliente}>
+                            {m.cliente}
+                        </span>
+                    ) : (
+                        <span className={`text-4xl font-black italic tracking-tighter ${m.status === 'livre' ? 'text-zinc-700' : 'text-yellow-500'}`}>
+                            {m.numero.toString().padStart(2, '0')}
+                        </span>
+                    )}
+
+                    <div className="flex items-center gap-2 shrink-0">
+                        {m.status === 'ocupada' && (
+                            <Badge className="bg-yellow-500 text-zinc-950 font-black text-[10px] uppercase max-w-[80px] truncate">
+                                {isAvulso ? "Avulso" : m.cliente}
+                            </Badge>
+                        )}
                         {usuarioAtual?.role === 'gerente' && (
-                            <button onClick={(e) => cancelarMesa(m, e)} className="text-zinc-600 hover:text-red-500 transition-colors p-1" title="Cancelar Mesa e Estornar Estoque">
+                            <button onClick={(e) => cancelarMesa(m, e)} className="text-zinc-600 hover:text-red-500 transition-colors p-1" title="Cancelar Comanda e Estornar Estoque">
                                 <Trash2 size={16} />
                             </button>
                         )}
@@ -1772,7 +1808,7 @@ export default function DashboardGlobal() {
                 </div>
                 <p className={`text-sm font-black tracking-widest uppercase ${m.status === 'livre' ? 'text-zinc-600' : 'text-yellow-500'}`}>{m.status === 'livre' ? 'Livre' : `R$ ${Number(m.total).toFixed(2).replace('.', ',')}`}</p>
               </div>
-            ))}
+            )})}
           </div>
         </main>
       )}
@@ -1792,7 +1828,7 @@ export default function DashboardGlobal() {
                   <div key={pedido.id} className="bg-zinc-900 border border-red-500/30 rounded-[1.5rem] overflow-hidden shadow-lg shadow-red-500/5">
                   <div className="bg-red-500/10 p-4 border-b border-red-500/20 flex justify-between items-center">
                           <div>
-                              <Badge className="bg-red-500 text-white font-black uppercase mb-1">MESA {pedido.mesa}</Badge>
+                              <Badge className="bg-red-500 text-white font-black uppercase mb-1">Comanda {pedido.mesa >= 1000 ? 'Avulsa' : pedido.mesa}</Badge>
                                <p className="text-xs font-bold text-zinc-300 uppercase">{pedido.cliente}</p>
                           </div>
                           <span className="text-xs font-black text-red-400"><Clock size={12} className="inline mr-1"/>{pedido.hora}</span>
@@ -1825,7 +1861,6 @@ export default function DashboardGlobal() {
           <div className="p-8 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
              <SheetTitle className="text-3xl font-black text-yellow-500 italic uppercase">Cardápio</SheetTitle>
              
-             {/* INDICADOR DE LANÇAMENTO DIRECIONADO NA MESMA MESA */}
              {mesaSelecionada && getPessoasDaMesa(mesaSelecionada).length > 1 && (
                 <div className="bg-yellow-500/10 border border-yellow-500/30 p-2 rounded-xl mt-3 text-center animate-in fade-in">
                   <span className="text-[10px] font-black uppercase tracking-widest text-yellow-500 block">
@@ -1872,7 +1907,6 @@ export default function DashboardGlobal() {
           <DialogTitle className="text-3xl font-black uppercase text-center italic tracking-tighter">Recebimento</DialogTitle>
           <div className="mt-6 space-y-6">
              
-             {/* SELETOR REFINADO DE MODO DE PAGAMENTO (TODA A MESA OU PESSOA ESPECÍFICA) */}
              {mesaSelecionada && getPessoasDaMesa(mesaSelecionada).length > 1 && (
                 <div className="bg-zinc-900 p-3 rounded-2xl border border-zinc-800 animate-in fade-in">
                   <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest block mb-2 text-center">
@@ -2129,7 +2163,7 @@ export default function DashboardGlobal() {
                               <div className="flex items-center gap-4">
                                 <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/50">{ing.qtd} {ing.unidade}</Badge>
                                 <span className="text-[10px] text-zinc-500">Custo: R$ {ing.custo_calculado?.toFixed(2)}</span>
-                                  <button onClick={() => setReceitaTemp(receitaTemp.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
+                                  <button onClick={() => setReceitaTemp((prev: any[]) => prev.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-400"><Trash2 size={14}/></button>
                             </div>
                         </div>
                     ))}
@@ -2214,7 +2248,9 @@ export default function DashboardGlobal() {
               <div className="p-8 pb-4 border-b border-zinc-800 bg-zinc-900/50 shrink-0">
                   <div className="flex justify-between items-start">
                       <div>
-                          <SheetTitle className="text-4xl font-black text-yellow-500 italic uppercase leading-none">Mesa {mesaSelecionada?.numero}</SheetTitle>
+                          <SheetTitle className="text-4xl font-black text-yellow-500 italic uppercase leading-none">
+                              {typeof mesaSelecionada?.numero === 'number' && mesaSelecionada.numero >= 1000 ? 'Avulso' : `Mesa ${mesaSelecionada?.numero}`}
+                          </SheetTitle>
                           <p className="text-zinc-400 font-black uppercase text-xs mt-2 ml-1 opacity-70">Clientes: {mesaSelecionada?.cliente}</p>
                       </div>
                       
@@ -2223,7 +2259,6 @@ export default function DashboardGlobal() {
                       </button>
                   </div>
 
-                  {/* ABAS REFINADAS POR PESSOA DA MESA */}
                   {mesaSelecionada && (
                       <div className="flex gap-2 overflow-x-auto mt-4 pt-1 scrollbar-hide border-b border-zinc-800/80">
                           {["Todos", ...getPessoasDaMesa(mesaSelecionada)].map((nome) => (
@@ -2246,7 +2281,6 @@ export default function DashboardGlobal() {
                   )}
               </div>
          
-        {/* CONSUMO FILTRADO PELA PESSOA SELECIONADA */}
         <div className="flex-1 overflow-y-auto p-8 space-y-3 bg-zinc-950/50">
           <div className="flex justify-between items-center mb-2">
             <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest block">
@@ -2285,7 +2319,6 @@ export default function DashboardGlobal() {
             <p className="text-zinc-600 italic text-sm font-bold">Nenhum pedido lançado para esta seleção.</p>
           )}
 
-          {/* BOTÃO CIRÚRGICO DE DESMEMBRAMENTO PARA AVULSO (VISÍVEL QUANDO A ABA DE UMA PESSOA ESTÁ ATIVA) */}
           {pessoaAtivaMesa !== "Todos" && getPessoasDaMesa(mesaSelecionada).length > 1 && (
               <button 
                   onClick={() => separarPessoaParaAvulso(pessoaAtivaMesa)}
