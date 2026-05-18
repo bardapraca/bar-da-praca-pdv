@@ -64,6 +64,9 @@ export default function DashboardGlobal() {
   const [mesaSelecionada, setMesaSelecionada] = useState<any>(null);
   const [inputMesaNova, setInputMesaNova] = useState("");
   const [inputNomeCliente, setInputNomeCliente] = useState("");
+  
+  // NOVO: Controle de Abate Parcial
+  const [inputValorParcial, setInputValorParcial] = useState("");
 
   // Nomes isolados para gestão de abas na mesma mesa com vedação de vazamento
   const [pessoaAtivaMesa, setPessoaAtivaMesa] = useState<string>("Todos");
@@ -270,6 +273,17 @@ export default function DashboardGlobal() {
                 const { idDestino, itensMesclados, totalMesclado, clienteMescladoStr, idOrigem } = acao.payload;
                 await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', idDestino);
                 await supabase.from('mesas').delete().eq('id', idOrigem);
+            }
+            else if (acao.tipo === 'ABATER_PARCIAL') {
+                const { valorAbate, custoVenda, lucroVenda, nomeCliente, mesaNum, mesaNumero, itemAbate } = acao.payload;
+                await supabase.from('vendas').insert([{ total_venda: valorAbate, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: `${nomeCliente} (Parcial)`, mesa_numero: mesaNum, itens: [itemAbate] }]);
+                
+                const { data: mesaNuvem } = await supabase.from('mesas').select('*').eq('numero', mesaNumero).maybeSingle();
+                if (mesaNuvem) {
+                    const novosItens = [...(mesaNuvem.itens || []), itemAbate];
+                    const novoTotal = Math.max(0, parseFloat((Number(mesaNuvem.total) - valorAbate).toFixed(2)));
+                    await supabase.from('mesas').update({ total: novoTotal, itens: novosItens }).eq('id', mesaNuvem.id);
+                }
             }
 
             sucessoCount++;
@@ -1213,6 +1227,84 @@ export default function DashboardGlobal() {
     } catch (err: any) { alert("ERRO SUPABASE (Vendas)."); }
   };
 
+  // NOVO: Função matemática segura para Abate Parcial mantendo a mesa aberta
+  const abaterValorParcial = async () => {
+    if (!mesaSelecionada) return;
+    const valorAbate = parseFloat(inputValorParcial.replace(',', '.'));
+    if (isNaN(valorAbate) || valorAbate <= 0) return alert("Digite um valor válido para abater.");
+    
+    if (valorAbate > totalCheckoutCalculado) return alert("O valor de abate não pode ser maior que o total da conta atual.");
+
+    const lucroVenda = parseFloat((valorAbate * 0.60).toFixed(2));
+    const custoVenda = parseFloat((valorAbate - lucroVenda).toFixed(2));
+    const mesaNum = mesaSelecionada.numero === "Avulso" ? 0 : parseInt(mesaSelecionada.numero) || 0;
+    
+    const isParcial = modoFechamentoCheckout !== "Todos";
+    const nomeCliente = isParcial ? modoFechamentoCheckout : (mesaSelecionada.cliente || "Consumidor");
+
+    const itemAbate = {
+        id: 'abate-' + Date.now(),
+        nome: `PAGAMENTO PARCIAL`,
+        preco: -valorAbate,
+        quantidade: 1,
+        dono: isParcial ? modoFechamentoCheckout : "Consumidor"
+    };
+
+    const itensAtualizados = [...mesaSelecionada.itens, itemAbate];
+    const novoTotalMesa = Math.max(0, parseFloat((Number(mesaSelecionada.total) - valorAbate).toFixed(2)));
+
+    if (isOffline) {
+        const novaVendaLocal = {
+            id: Date.now(),
+            total_venda: valorAbate,
+            custo_total: custoVenda,
+            lucro_total: lucroVenda,
+            cliente_nome: `${nomeCliente} (Parcial)`,
+            mesa_numero: mesaNum,
+            itens: [itemAbate],
+            data_venda: new Date().toISOString()
+        };
+        setHistoricoVendas((prev: any[]) => [novaVendaLocal, ...prev]);
+
+        const mesaAtualizada = { ...mesaSelecionada, total: novoTotalMesa, itens: itensAtualizados };
+        setMesasReais((prev: any[]) => prev.map((m: any) => m.id === mesaSelecionada.id ? mesaAtualizada : m));
+        setMesaSelecionada(mesaAtualizada); 
+        
+        registrarAcaoOffline({
+            tipo: 'ABATER_PARCIAL',
+            payload: { valorAbate, custoVenda, lucroVenda, nomeCliente, mesaNum, mesaNumero: mesaSelecionada.numero, itemAbate },
+            descricao: `Abate Parcial R$ ${valorAbate.toFixed(2)} (${nomeCliente})`
+        });
+
+        setInputValorParcial("");
+        alert(`Valor de R$ ${valorAbate.toFixed(2)} abatido localmente!`);
+        return;
+    }
+
+    try {
+        const { error: errVenda } = await supabase.from('vendas').insert([{ 
+            total_venda: valorAbate, 
+            custo_total: custoVenda, 
+            lucro_total: lucroVenda, 
+            cliente_nome: `${nomeCliente} (Parcial)`, 
+            mesa_numero: mesaNum, 
+            itens: [itemAbate] 
+        }]);
+        if (errVenda) throw errVenda;
+
+        const { error: errMesa } = await supabase.from('mesas').update({ total: novoTotalMesa, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
+        if (errMesa) throw errMesa;
+
+        const mesaAtualizada = { ...mesaSelecionada, total: novoTotalMesa, itens: itensAtualizados };
+        setMesaSelecionada(mesaAtualizada);
+        setMesasReais((prev: any[]) => prev.map((m: any) => m.id === mesaSelecionada.id ? mesaAtualizada : m));
+        
+        setInputValorParcial("");
+        setTimeout(() => buscarVendas(), 400); 
+        alert(`Valor de R$ ${valorAbate.toFixed(2)} abatido com sucesso!`);
+    } catch (err: any) { alert("ERRO SUPABASE (Abate Parcial)."); }
+  };
+
   const cancelarMesa = async (mesa: any, e: React.MouseEvent) => {
     e.stopPropagation(); 
     if (usuarioAtual?.role !== 'gerente') {
@@ -1609,7 +1701,7 @@ export default function DashboardGlobal() {
         </div>
       </header>
 
-      {/* FINANCEIRO CONSOLIDADO */}
+      {/* FINANCEIRO CONSOLIDADO (UNIFICADO COM PERDAS VERMELHAS E MODAIS CIRÚRGICOS) */}
       {visaoAtiva === "financeiro" && usuarioAtual?.role === 'gerente' && (
         <main className="p-6 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-800 print:border-none print:p-0 print:bg-transparent">
@@ -2023,7 +2115,7 @@ export default function DashboardGlobal() {
                 </div>
              )}
 
-             <div className="bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800/50 max-h-[180px] overflow-y-auto scrollbar-hide space-y-2">
+             <div className="bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800/50 max-h-[240px] overflow-y-auto scrollbar-hide space-y-2">
                <Label className="text-zinc-500 font-black uppercase text-[10px] mb-2 block tracking-widest">
                   Resumo do Pedido ({modoFechamentoCheckout})
                </Label>
@@ -2031,7 +2123,7 @@ export default function DashboardGlobal() {
                    itensCheckoutExibidos.map((item: any, idx: number) => (
                       <div key={idx} className="flex justify-between text-xs font-bold text-zinc-300 uppercase">
                          <span>{item.quantidade}x {item.nome}</span>
-                         <span>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
+                         <span className={item.preco < 0 ? "text-green-400" : ""}>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
                       </div>
                    ))
                ) : (
@@ -2040,6 +2132,25 @@ export default function DashboardGlobal() {
                <div className="border-t border-zinc-800 mt-2 pt-2 flex justify-between font-black text-yellow-500 text-lg italic">
                   <span>TOTAL A PAGAR</span>
                   <span>R$ {totalCheckoutCalculado.toFixed(2)}</span>
+               </div>
+               
+               {/* NOVA SESSÃO: PAGAMENTO PARCIAL (ABATE) */}
+               <div className="border-t border-zinc-800 mt-4 pt-4">
+                  <Label className="text-zinc-500 font-black uppercase text-[10px] tracking-widest block mb-2 text-center">Pagamento Parcial Antecipado</Label>
+                  <div className="flex gap-2 justify-center">
+                      <Input 
+                          placeholder="R$ 0,00" 
+                          value={inputValorParcial} 
+                          onChange={e => setInputValorParcial(e.target.value)} 
+                          className="bg-zinc-950 border-zinc-800 text-center font-black text-yellow-500 w-32 h-10 rounded-xl" 
+                      />
+                      <button 
+                          onClick={abaterValorParcial} 
+                          className="bg-zinc-800 hover:bg-zinc-700 text-white font-black px-4 rounded-xl text-[10px] uppercase tracking-widest transition-all"
+                      >
+                          Abater Valor
+                      </button>
+                  </div>
                </div>
             </div>
 
