@@ -59,7 +59,6 @@ export default function DashboardGlobal() {
   const [mesaSelecionada, setMesaSelecionada] = useState<any>(null);
   const [inputMesaNova, setInputMesaNova] = useState("");
   const [inputNomeCliente, setInputNomeCliente] = useState("");
-  
   const [inputValorParcial, setInputValorParcial] = useState("");
   
   const [pessoaAtivaMesa, setPessoaAtivaMesa] = useState<string>("Todos");
@@ -148,23 +147,33 @@ export default function DashboardGlobal() {
     };
   }, []);
 
+  // ================= REAL-TIME (WEB SOCKETS) SUPABASE COM LOGS CIRÚRGICOS =================
   useEffect(() => {
     if (!usuarioAtual || isOffline) return;
 
+    console.log("⏳ Iniciando conexão WebSocket com Supabase...");
+
     const canalRealtime = supabase.channel('bar-praca-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, () => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, (payload) => {
+            console.log("⚡ ALERTA REALTIME MESA RECEBIDO:", payload);
             buscarMesas();
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'vendas' }, () => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'vendas' }, (payload) => {
+            console.log("⚡ ALERTA REALTIME VENDA RECEBIDO:", payload);
             buscarVendas();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_cozinha' }, (payload) => {
+            console.log("⚡ ALERTA REALTIME KDS RECEBIDO:", payload);
             buscarPedidosCozinha();
             if (payload.eventType === 'INSERT' && usuarioAtual.role === 'gerente') tocarSomAlerta();
         })
-        .subscribe();
+        .subscribe((status, err) => {
+            console.log("📡 STATUS DA CONEXÃO REALTIME:", status);
+            if (err) console.error("❌ ERRO NO REALTIME:", err);
+        });
 
     return () => {
+        console.log("🛑 Fechando conexão WebSocket...");
         supabase.removeChannel(canalRealtime);
     };
   }, [usuarioAtual, isOffline]);
@@ -219,7 +228,7 @@ export default function DashboardGlobal() {
                 }
             }
             else if (acao.tipo === 'FINALIZAR_PEDIDO_COZINHA') {
-                await supabase.from('pedidos_cozinha').delete().eq('id', acao.payload.id);
+              await supabase.from('pedidos_cozinha').delete().eq('id', acao.payload.id);
             }
             else if (acao.tipo === 'FINALIZAR_PAGAMENTO') {
               const { totalVenda, custoVenda, lucroVenda, nomeCliente, mesaNum, mesaNumero, itensVenda, isParcial, modoFechamentoCheckout } = acao.payload;
@@ -309,7 +318,7 @@ export default function DashboardGlobal() {
     buscarPedidosCozinha();
     alert(`Sincronização concluída! ${sucessoCount} de ${filaParaProcessar.length} ordens despachadas para a nuvem.`);
   };
-  
+
   const limparFilaOffline = () => {
     if (confirm("ATENÇÃO: Deseja realmente descartar as ações pendentes na fila offline?")) {
         setSyncQueue([]);
@@ -395,7 +404,7 @@ export default function DashboardGlobal() {
     setLoginSenha(""); 
     setVisaoAtiva("salao");
   };
-  
+
   const tocarSomAlerta = () => {
     try {
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -1331,8 +1340,12 @@ export default function DashboardGlobal() {
         const { error } = await supabase.from('mesas').delete().eq('id', mesa.id);
         if (error) throw error;
 
+        // NOVO: Limpar pedidos pendentes na cozinha referentes a esta mesa para não cozinhar à toa
+        await supabase.from('pedidos_cozinha').delete().eq('mesa', mesa.numero.toString());
+
         buscarMesas();
         buscarInsumos();
+        buscarPedidosCozinha();
         alert("Comanda excluída com sucesso!");
       } catch(err: any) { alert("Erro ao excluir comanda.");
       }
