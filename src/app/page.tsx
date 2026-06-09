@@ -327,12 +327,14 @@ export default function DashboardGlobal() {
         if (insumoEmEdicao) {
             const insumoOriginal = insumosBase.find((ins: any) => ins.id === insumoEmEdicao);
             if (formato === "unidade" && insumoOriginal) unidadeFinal = insumoOriginal.unidade;
-            await supabase.from('insumos').update({ nome: novoInsumo.nome, unidade: unidadeFinal, estoque: estoqueFinal, custo_unidade: custoUnidadeFinal }).eq('id', insumoEmEdicao);
+            const { error } = await supabase.from('insumos').update({ nome: novoInsumo.nome, unidade: unidadeFinal, estoque: estoqueFinal, custo_unidade: custoUnidadeFinal }).eq('id', insumoEmEdicao);
+            if (error) throw error;
         } else {
-            await supabase.from('insumos').insert([{ nome: novoInsumo.nome, unidade: unidadeFinal, estoque: estoqueFinal, custo_unidade: custoUnidadeFinal }]);
+            const { error } = await supabase.from('insumos').insert([{ nome: novoInsumo.nome, unidade: unidadeFinal, estoque: estoqueFinal, custo_unidade: custoUnidadeFinal }]);
+            if (error) throw error;
         }
         setModalNovoInsumo(false); buscarInsumos();
-    } catch (err: any) { alert("ERRO SUPABASE (Insumos): Verifique a estrutura da tabela no banco."); }
+    } catch (err: any) { alert("ERRO SUPABASE (Insumos). Verifique a conexão."); }
   };
   
   const abrirParaEdicaoPerda = (p: any) => { setPerdaEmEdicao(p); setNovaPerda({ insumo_id: p.insumo_id, quantidade: p.quantidade.toString() }); setModalNovaPerda(true); };
@@ -353,14 +355,20 @@ export default function DashboardGlobal() {
             let oldDeducao = perdaEmEdicao.quantidade;
             if (insumo.unidade === 'KG' || insumo.unidade === 'L') oldDeducao = perdaEmEdicao.quantidade / 1000;
             const novoEstoque = insumo.estoque + oldDeducao - deducaoEstoque;
-            await supabase.from('perdas').update({ insumo_id: insumo.id, nome_insumo: insumo.nome, quantidade: qtdPerdida, custo_perda: custoPerdido }).eq('id', perdaEmEdicao.id);
-            await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
+            const { error: errPerda } = await supabase.from('perdas').update({ insumo_id: insumo.id, nome_insumo: insumo.nome, quantidade: qtdPerdida, custo_perda: custoPerdido }).eq('id', perdaEmEdicao.id);
+            if (errPerda) throw errPerda;
+            
+            const { error: errEst } = await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
+            if (errEst) throw errEst;
         } else {
-            await supabase.from('perdas').insert([{ insumo_id: insumo.id, nome_insumo: insumo.nome, quantidade: qtdPerdida, custo_perda: custoPerdido }]);
-            await supabase.from('insumos').update({ estoque: insumo.estoque - deducaoEstoque }).eq('id', insumo.id);
+            const { error: errPerda } = await supabase.from('perdas').insert([{ insumo_id: insumo.id, nome_insumo: insumo.nome, quantidade: qtdPerdida, custo_perda: custoPerdido }]);
+            if (errPerda) throw errPerda;
+            
+            const { error: errEst } = await supabase.from('insumos').update({ estoque: insumo.estoque - deducaoEstoque }).eq('id', insumo.id);
+            if (errEst) throw errEst;
         }
         setModalNovaPerda(false); buscarInsumos(); buscarPerdas();
-    } catch (err: any) { alert("ERRO SUPABASE (Perdas)."); }
+    } catch (err: any) { alert("ERRO SUPABASE (Perdas). Verifique a conexão."); }
   };
 
   const salvarNovoUsuario = async () => {
@@ -368,12 +376,21 @@ export default function DashboardGlobal() {
     try {
         const { error: authError } = await supabase.auth.signUp({ email: novoMembro.email, password: novoMembro.senha });
         if (authError) throw authError;
-        await supabase.from('usuarios').insert([{ nome: novoMembro.nome, email: novoMembro.email, role: novoMembro.role }]);
+        
+        const { error } = await supabase.from('usuarios').insert([{ nome: novoMembro.nome, email: novoMembro.email, role: novoMembro.role }]);
+        if (error) throw error;
+        
         setModalNovoUsuario(false); setNovoMembro({ nome: "", email: "", senha: "", role: "colaborador" }); buscarUsuarios();
-    } catch (err: any) { alert("ERRO AO CADASTRAR."); }
+    } catch (err: any) { alert("ERRO AO CADASTRAR. Tente novamente."); }
   };
 
-  const removerUsuario = async (id: string) => { if (confirm("Tem certeza que deseja remover este acesso?")) { await supabase.from('usuarios').delete().eq('id', id); buscarUsuarios(); } };
+  const removerUsuario = async (id: string) => { 
+      if (confirm("Tem certeza que deseja remover este acesso?")) { 
+          const { error } = await supabase.from('usuarios').delete().eq('id', id); 
+          if (error) alert("Erro ao excluir");
+          buscarUsuarios(); 
+      } 
+  };
 
   const abrirParaNovoProduto = () => { setProdutoEmEdicao(null); setNovoProd({ nome: "", categoria: "Bebidas", preco: "" }); setReceitaTemp([]); setModalNovoProduto(true); };
   const abrirParaEdicaoProduto = (p: any) => { setProdutoEmEdicao(p.id); setNovoProd({ nome: p.nome, categoria: p.categoria || "Bebidas", preco: p.preco?.toString() || "" }); setReceitaTemp(p.receita || []); setModalNovoProduto(true); };
@@ -393,10 +410,15 @@ export default function DashboardGlobal() {
         const custoCalculado = receitaTemp.reduce((acc: number, ing: any) => acc + (ing.custo_calculado || 0), 0);
         const precoParsed = parseFloat(String(novoProd.preco).replace(',', '.'));
         const dados = { nome: novoProd.nome, categoria: novoProd.categoria, preco: isNaN(precoParsed) ? 0 : precoParsed, custo: custoCalculado, receita: receitaTemp, un: "UN" };
-        if (produtoEmEdicao) { await supabase.from('produtos').update(dados).eq('id', produtoEmEdicao); } 
-        else { await supabase.from('produtos').insert([dados]); }
+        if (produtoEmEdicao) { 
+            const { error } = await supabase.from('produtos').update(dados).eq('id', produtoEmEdicao); 
+            if (error) throw error;
+        } else { 
+            const { error } = await supabase.from('produtos').insert([dados]); 
+            if (error) throw error;
+        }
         setModalNovoProduto(false); buscarProdutos();
-    } catch (err: any) { alert("ERRO (Produtos)."); }
+    } catch (err: any) { alert("ERRO AO SALVAR PRODUTO. Tente novamente."); }
   };
 
   const abrirGerenciadorFiado = (fiado: any) => {
@@ -410,7 +432,7 @@ export default function DashboardGlobal() {
   const selecionarTodosFiado = () => { if (itensSelecionadosFiado.length === fiadoEmEdicao?.itens.length) { setItensSelecionadosFiado([]); } else { setItensSelecionadosFiado(fiadoEmEdicao?.itens.map((_: any, idx: number) => idx) || []); } };
 
   const receberPagamentoFiado = async () => {
-      if (!fiadoEmEdicao || itensSelecionadosFiado.length === 0) { alert("Selecione pelo menos um item."); return; }
+      if (!fiadoEmEdicao || itensSelecionadosFiado.length === 0) { alert("Selecione pelo menos um item para receber pagamento."); return; }
 
       const itensParaPagar = fiadoEmEdicao.itens.filter((_: any, idx: number) => itensSelecionadosFiado.includes(idx));
       const itensRestantes = fiadoEmEdicao.itens.filter((_: any, idx: number) => !itensSelecionadosFiado.includes(idx));
@@ -425,14 +447,20 @@ export default function DashboardGlobal() {
           if (existente) { existente.quantidade += 1; } else { itensRestantesAgrupados.push({ ...item }); }
       });
       const novoTotal = itensRestantesAgrupados.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
-      
-      try {
-          await supabase.from('vendas').insert([{ total_venda: totalPago, custo_total: custoPago, lucro_total: lucroPago, cliente_nome: `Fiado Pago: ${fiadoEmEdicao.cliente_nome}`, mesa_numero: 0, itens: itensParaPagar }]);
-          if (itensRestantesAgrupados.length === 0) { await supabase.from('fiados').delete().eq('id', fiadoEmEdicao.id); } 
-          else { await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', fiadoEmEdicao.id); }
 
-          setPessoaAtivaMesa("Todos"); setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
-          buscarFiados(); buscarVendas(); alert("Pagamento recebido!");
+      try {
+          const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalPago, custo_total: custoPago, lucro_total: lucroPago, cliente_nome: `Fiado Pago: ${fiadoEmEdicao.cliente_nome}`, mesa_numero: 0, itens: itensParaPagar }]);
+          if (errVenda) throw errVenda;
+
+          if (itensRestantesAgrupados.length === 0) {
+              const { error: errDelete } = await supabase.from('fiados').delete().eq('id', fiadoEmEdicao.id);
+              if (errDelete) throw errDelete;
+          } else {
+              const { error: errUpdate } = await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', fiadoEmEdicao.id);
+              if (errUpdate) throw errUpdate;
+          }
+
+          setPessoaAtivaMesa("Todos"); setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]); buscarFiados(); buscarVendas(); alert("Pagamento recebido!");
       } catch (err) { alert("Erro ao receber o fiado."); }
   };
 
@@ -472,7 +500,8 @@ export default function DashboardGlobal() {
 
         const novoClienteStr = mesaSelecionada.cliente ? `${mesaSelecionada.cliente} / ${novoNome}` : novoNome;
         try {
-            await supabase.from('mesas').update({ cliente: novoClienteStr }).eq('id', mesaSelecionada.id);
+            const { error } = await supabase.from('mesas').update({ cliente: novoClienteStr }).eq('id', mesaSelecionada.id);
+            if (error) throw error;
             const mesaAtualizada = { ...mesaSelecionada, cliente: novoClienteStr };
             setMesaSelecionada(mesaAtualizada); setPessoaAtivaMesa(novoNome); setInputNovoNomePessoa(""); setModalAdicionarPessoa(false); buscarMesas();
         } catch (err: any) { alert("Erro ao adicionar pessoa."); }
@@ -499,8 +528,11 @@ export default function DashboardGlobal() {
 
         const clienteMescladoStr = pessoasDestino.join(" / ");
         try {
-            await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', mesaSelecionada.id);
-            await supabase.from('mesas').delete().eq('id', mesaOrigem.id);
+            const { error: errU } = await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', mesaSelecionada.id);
+            if (errU) throw errU;
+            const { error: errD } = await supabase.from('mesas').delete().eq('id', mesaOrigem.id);
+            if (errD) throw errD;
+            
             setMesaSelecionada({ ...mesaSelecionada, total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr });
             setPessoaAtivaMesa(identificadorOrigem); setSelecaoMesaMesclar(""); setModalAdicionarPessoa(false); buscarMesas();
             alert(`Comandas unificadas!`);
@@ -521,8 +553,11 @@ export default function DashboardGlobal() {
       const proxAvulso = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ? Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).map((m: any) => m.numero)) + 1 : 1001;
 
       try {
-        await supabase.from('mesas').update({ cliente: novoClienteStr, total: totalRestante, itens: itensRestantes }).eq('id', mesaSelecionada.id);
-        await supabase.from('mesas').insert([{ numero: proxAvulso, status: 'ocupada', cliente: nomePessoa, total: totalSeparado, itens: itensSeparados }]);
+        const { error: errU } = await supabase.from('mesas').update({ cliente: novoClienteStr, total: totalRestante, itens: itensRestantes }).eq('id', mesaSelecionada.id);
+        if (errU) throw errU;
+        const { error: errI } = await supabase.from('mesas').insert([{ numero: proxAvulso, status: 'ocupada', cliente: nomePessoa, total: totalSeparado, itens: itensSeparados }]);
+        if (errI) throw errI;
+        
         setMesaSelecionada(null); setPessoaAtivaMesa("Todos"); setFichaMesaAberta(false); buscarMesas(); alert(`Separado com sucesso!`);
       } catch (err: any) { alert("Erro ao separar."); }
     }
@@ -548,8 +583,10 @@ export default function DashboardGlobal() {
             if (!nomesDestino.includes(novoNome)) nomesDestino.push(novoNome);
             const clienteMescladoStr = nomesDestino.join(" / ");
 
-            await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', mesaDestino.id);
-            await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
+            const { error: errU } = await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', mesaDestino.id);
+            if (errU) throw errU;
+            const { error: errD } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
+            if (errD) throw errD;
             
             setMesaSelecionada(null); setPessoaAtivaMesa("Todos"); setFichaMesaAberta(false); setModalEditarMesa(false); buscarMesas(); alert(`Comanda unida à Mesa ${novoNumParsed}!`);
         } else {
@@ -557,7 +594,10 @@ export default function DashboardGlobal() {
             const pessoasAtuais = getPessoasDaMesa(mesaSelecionada);
             let itensAtualizados = mesaSelecionada.itens;
             if (pessoasAtuais.length <= 1) { itensAtualizados = mesaSelecionada.itens.map((i: any) => ({ ...i, dono: novoNome })); }
-            await supabase.from('mesas').update({ numero: numFinal, cliente: novoNome, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
+            
+            const { error } = await supabase.from('mesas').update({ numero: numFinal, cliente: novoNome, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
+            if (error) throw error;
+            
             setMesaSelecionada((prev: any) => ({ ...prev, numero: numFinal, cliente: novoNome, itens: itensAtualizados }));
             setPessoaAtivaMesa("Todos"); setModalEditarMesa(false); buscarMesas(); alert("Atualizado!");
         }
@@ -587,9 +627,11 @@ export default function DashboardGlobal() {
                 const index = itensMesclados.findIndex((i: any) => i.id === itemNovo.id);
                 if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; } else { itensMesclados.push({ ...itemNovo }); }
             });
-            await supabase.from('fiados').update({ total: novoTotal, itens: itensMesclados }).eq('id', fiadoExistente.id);
+            const { error } = await supabase.from('fiados').update({ total: novoTotal, itens: itensMesclados }).eq('id', fiadoExistente.id);
+            if (error) throw error;
         } else {
-            await supabase.from('fiados').insert([{ cliente_nome: nomeCliente, total: totalFiadoAtual, itens: itensMesaFiado }]);
+            const { error } = await supabase.from('fiados').insert([{ cliente_nome: nomeCliente, total: totalFiadoAtual, itens: itensMesaFiado }]);
+            if (error) throw error;
         }
 
         if (isParcial) {
@@ -597,9 +639,12 @@ export default function DashboardGlobal() {
             const totalRestante = itensRestantes.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
             const nomesAtuais = getPessoasDaMesa(mesaSelecionada);
             const novoClienteStr = nomesAtuais.filter(n => n !== modoFechamentoCheckout).join(" / ") || "Consumidor";
-            await supabase.from('mesas').update({ cliente: novoClienteStr, total: totalRestante, itens: itensRestantes }).eq('id', mesaSelecionada.id);
+            
+            const { error } = await supabase.from('mesas').update({ cliente: novoClienteStr, total: totalRestante, itens: itensRestantes }).eq('id', mesaSelecionada.id);
+            if (error) throw error;
         } else {
-            await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
+            const { error } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
+            if (error) throw error;
         }
 
         setPessoaAtivaMesa("Todos"); setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarFiados(); alert(`Fiado salvo!`);
@@ -617,19 +662,23 @@ export default function DashboardGlobal() {
     const nomeCliente = isParcial ? modoFechamentoCheckout : (mesaSelecionada.cliente || "Consumidor");
 
     try {
-        await supabase.from('vendas').insert([{ total_venda: totalVenda, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: nomeCliente, mesa_numero: mesaNum, itens: itensVenda || [] }]);
+        const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: totalVenda, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: nomeCliente, mesa_numero: mesaNum, itens: itensVenda || [] }]);
+        if (errVenda) throw errVenda;
 
         if (isParcial) {
             const itensRestantes = mesaSelecionada.itens.filter((i: any) => (i.dono || "Consumidor") !== modoFechamentoCheckout);
             const totalRestante = itensRestantes.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
             const nomesAtuais = getPessoasDaMesa(mesaSelecionada);
             const novoClienteStr = nomesAtuais.filter(n => n !== modoFechamentoCheckout).join(" / ") || "Consumidor";
-            await supabase.from('mesas').update({ cliente: novoClienteStr, total: totalRestante, itens: itensRestantes }).eq('id', mesaSelecionada.id);
+            
+            const { error } = await supabase.from('mesas').update({ cliente: novoClienteStr, total: totalRestante, itens: itensRestantes }).eq('id', mesaSelecionada.id);
+            if (error) throw error;
         } else {
-            await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
+            const { error } = await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
+            if (error) throw error;
         }
         
-        setPessoaAtivaMesa("Todos"); setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarVendas(); 
+        setPessoaAtivaMesa("Todos"); setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); setTimeout(() => buscarVendas(), 400); 
     } catch (err: any) { alert("ERRO SUPABASE (Vendas)."); }
   };
 
@@ -650,11 +699,16 @@ export default function DashboardGlobal() {
     const novoTotalMesa = Math.max(0, parseFloat((Number(mesaSelecionada.total) - valorAbate).toFixed(2)));
 
     try {
-        await supabase.from('vendas').insert([{ total_venda: valorAbate, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: `${nomeCliente} (Parcial)`, mesa_numero: mesaNum, itens: [itemAbate] }]);
-        await supabase.from('mesas').update({ total: novoTotalMesa, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
+        const { error: errVenda } = await supabase.from('vendas').insert([{ total_venda: valorAbate, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: `${nomeCliente} (Parcial)`, mesa_numero: mesaNum, itens: [itemAbate] }]);
+        if (errVenda) throw errVenda;
         
-        setMesaSelecionada({ ...mesaSelecionada, total: novoTotalMesa, itens: itensAtualizados });
-        setInputValorParcial(""); buscarMesas(); buscarVendas(); alert(`Valor abatido!`);
+        const { error: errMesa } = await supabase.from('mesas').update({ total: novoTotalMesa, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
+        if (errMesa) throw errMesa;
+
+        const mesaAtualizada = { ...mesaSelecionada, total: novoTotalMesa, itens: itensAtualizados };
+        setMesaSelecionada(mesaAtualizada);
+        
+        setInputValorParcial(""); buscarMesas(); setTimeout(() => buscarVendas(), 400); alert(`Valor abatido!`);
     } catch (err: any) { alert("Erro ao abater valor."); }
   };
 
@@ -669,13 +723,20 @@ export default function DashboardGlobal() {
             if (p && p.receita && Array.isArray(p.receita)) {
               for (const ing of p.receita) {
                 const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
-                if (insumo) await supabase.from('insumos').update({ estoque: insumo.estoque + (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
+                if (insumo) {
+                    const { error } = await supabase.from('insumos').update({ estoque: insumo.estoque + (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
+                    if (error) throw error;
+                }
               }
             }
           }
         }
-        await supabase.from('mesas').delete().eq('id', mesa.id);
-        await supabase.from('pedidos_cozinha').delete().eq('mesa', mesa.numero.toString());
+        const { error: errMesa } = await supabase.from('mesas').delete().eq('id', mesa.id);
+        if (errMesa) throw errMesa;
+        
+        const { error: errCozinha } = await supabase.from('pedidos_cozinha').delete().eq('mesa', mesa.numero.toString());
+        if (errCozinha) console.error("Sem pedido na cozinha");
+
         buscarMesas(); buscarInsumos(); buscarPedidosCozinha();
       } catch(err: any) { alert("Erro ao excluir."); }
     }
@@ -689,12 +750,18 @@ export default function DashboardGlobal() {
         if (p && p.receita && Array.isArray(p.receita)) {
           for (const ing of p.receita) {
             const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
-            if (insumo) await supabase.from('insumos').update({ estoque: insumo.estoque + (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
+            if (insumo) {
+                const { error } = await supabase.from('insumos').update({ estoque: insumo.estoque + (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
+                if (error) throw error;
+            }
           }
         }
         const novosItens = [...mesa.itens]; novosItens.splice(indexItem, 1); 
         const novoTotal = Math.max(0, mesa.total - (item.preco * item.quantidade));
-        await supabase.from('mesas').update({ itens: novosItens, total: novoTotal }).eq('id', mesa.id);
+        
+        const { error } = await supabase.from('mesas').update({ itens: novosItens, total: novoTotal }).eq('id', mesa.id);
+        if (error) throw error;
+        
         setMesaSelecionada({ ...mesa, itens: novosItens, total: novoTotal }); buscarMesas(); buscarInsumos();
       } catch(err: any) { alert("Erro ao estornar."); }
     }
@@ -703,7 +770,9 @@ export default function DashboardGlobal() {
   const adicionarMesaSalao = async () => {
     try {
         const prox = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).length > 0 ? Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).map((m: any) => m.numero)) + 1 : 1;
-        await supabase.from('mesas').insert([{ numero: prox, status: 'livre', total: 0, itens: [] }]); buscarMesas();
+        const { error } = await supabase.from('mesas').insert([{ numero: prox, status: 'livre', total: 0, itens: [] }]); 
+        if (error) throw error;
+        buscarMesas();
     } catch (err: any) { alert("ERRO SUPABASE."); }
   };
   
@@ -723,14 +792,17 @@ export default function DashboardGlobal() {
         if (tipoAtendimento === "mesa") {
             const mesaExiste = mesasReais.find((m: any) => m.numero.toString() === inputMesaNova);
             if (mesaExiste) {
-                await supabase.from('mesas').update({ status: 'ocupada', cliente: inputNomeCliente }).eq('numero', inputMesaNova);
+                const { error } = await supabase.from('mesas').update({ status: 'ocupada', cliente: inputNomeCliente }).eq('numero', inputMesaNova);
+                if (error) throw error;
                 nMesa = { ...mesaExiste, status: 'ocupada', cliente: inputNomeCliente };
             } else {
-                const { data } = await supabase.from('mesas').insert([{ numero: numMesaParsed, status: 'ocupada', cliente: inputNomeCliente, total: 0, itens: [] }]).select();
+                const { data, error } = await supabase.from('mesas').insert([{ numero: numMesaParsed, status: 'ocupada', cliente: inputNomeCliente, total: 0, itens: [] }]).select();
+                if (error) throw error;
                 if (data) nMesa = data[0];
             }
         } else {
-            const { data } = await supabase.from('mesas').insert([{ numero: proxAvulso, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] }]).select();
+            const { data, error } = await supabase.from('mesas').insert([{ numero: proxAvulso, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] }]).select();
+            if (error) throw error;
             if (data) nMesa = data[0];
         }
         setMesaSelecionada(nMesa); setModalNovaComanda(false); setPedidoAtual([]); setPessoaAtivaMesa("Todos"); buscarMesas();
@@ -761,28 +833,40 @@ export default function DashboardGlobal() {
 
     try {
         const mesaId = mesaSelecionada?.id || mesasReais.find((m: any) => m.numero == inputMesaNova)?.id;
-        await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('id', mesaId);
+        
+        const { error: errMesa } = await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('id', mesaId);
+        if (errMesa) throw errMesa;
+        
         if (mesaSelecionada) setMesaSelecionada({ ...mesaSelecionada, total: totalNovo, itens: itensAtualizados });
         
-        if (novoPedidoCozinha) await supabase.from('pedidos_cozinha').insert([novoPedidoCozinha]);
+        if (novoPedidoCozinha) {
+            const { error: errCoz } = await supabase.from('pedidos_cozinha').insert([novoPedidoCozinha]);
+            if (errCoz) throw errCoz;
+        }
         
         for (const item of pedidoAtual) {
           const p = produtosBase.find((pb: any) => pb.id === item.id);
           if (p && p.receita && Array.isArray(p.receita)) {
               for (const ing of p.receita) {
                   const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
-                  if (insumo) await supabase.from('insumos').update({ estoque: insumo.estoque - (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
+                  if (insumo) {
+                      const { error: errEst } = await supabase.from('insumos').update({ estoque: insumo.estoque - (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
+                      if (errEst) throw errEst;
+                  }
               }
           }
         }
         
         setModalConfirmacaoAberto(false); setMenuLateralAberto(false); setPedidoAtual([]); buscarInsumos(); buscarMesas(); buscarPedidosCozinha();
-    } catch(err: any) { alert("ERRO ao Lançar Pedido."); }
+    } catch(err: any) { 
+        alert("ERRO: O pedido não foi salvo no banco. Verifique a internet e o console (F12)."); 
+    }
   };
   
   const finalizarPedidoCozinha = async (id: string) => {
     try {
-        await supabase.from('pedidos_cozinha').delete().eq('id', id);
+        const { error } = await supabase.from('pedidos_cozinha').delete().eq('id', id);
+        if (error) throw error;
         buscarPedidosCozinha();
     } catch (e: any) { alert("Erro ao concluir pedido da cozinha."); }
   };
@@ -801,7 +885,6 @@ export default function DashboardGlobal() {
 
   const subtotalPessoaAtiva = useMemo(() => { return itensExibidosMesa.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0); }, [itensExibidosMesa]);
 
-  // ================= RENDERIZAÇÃO =================
   if (!usuarioAtual) {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6" style={{ backgroundImage: "radial-gradient(circle at center, #18181b 0%, #09090b 100%)" }}>
@@ -1108,9 +1191,11 @@ export default function DashboardGlobal() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
              <h2 className="text-2xl font-black uppercase italic tracking-tighter">Salão</h2>
             <div className="flex items-center gap-4">
+                {/* BOTÃO DA COZINHA LIBERADO PARA TODOS */}
                 <button onClick={() => setModalPedidosAberto(true)} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs transition-all shadow-xl ${pedidosPendentes.length > 0 ? 'bg-red-600 text-white animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.6)]' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-yellow-500'}`}>
                       <ChefHat size={16}/> PEDIDOS DE PREPARO {pedidosPendentes.length > 0 && `(${pedidosPendentes.length})`}
                 </button>
+                
                 <button onClick={abrirNovoAtendimento} className="bg-zinc-900 text-zinc-400 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:text-yellow-500 transition-all shadow-xl"><PlusCircle size={16}/> NOVO ATENDIMENTO</button>
              </div>
           </div>
