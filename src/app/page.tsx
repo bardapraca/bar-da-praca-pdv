@@ -109,7 +109,6 @@ export default function DashboardGlobal() {
   const [fiadoEmEdicao, setFiadoEmEdicao] = useState<any>(null);
   const [itensSelecionadosFiado, setItensSelecionadosFiado] = useState<number[]>([]);
 
-  // BUSCAS NO BANCO DE DADOS
   const buscarProdutos = async () => { const { data } = await supabase.from('produtos').select('*').order('nome'); if (data) setProdutosBase(data); };
   const buscarMesas = async () => { const { data } = await supabase.from('mesas').select('*').order('numero'); if (data) setMesasReais(data); };
   const buscarVendas = async () => { const { data } = await supabase.from('vendas').select('*').order('data_venda', { ascending: false }); if (data) setHistoricoVendas(data); };
@@ -119,7 +118,6 @@ export default function DashboardGlobal() {
   const buscarFiados = async () => { const { data } = await supabase.from('fiados').select('*').order('data_criacao', { ascending: false }); if (data) setFiadosBase(data); };
   const buscarPedidosCozinha = async () => { const { data } = await supabase.from('pedidos_cozinha').select('*').order('created_at', { ascending: true }); if (data) setPedidosPendentes(data); };
 
-  // EFEITO INICIAL - CARREGA TUDO AO LOGAR
   useEffect(() => { 
     if (usuarioAtual) {
         buscarProdutos(); 
@@ -133,11 +131,9 @@ export default function DashboardGlobal() {
     }
   }, [usuarioAtual]);
 
-  // ================= ARQUITETURA INFALÍVEL: REALTIME + POLLING A CADA 5 SEGUNDOS =================
   useEffect(() => {
     if (!usuarioAtual) return;
 
-    // 1. Tenta escutar os eventos instantâneos (WebSockets)
     const channel = supabase.channel('realtime-bar')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, () => {
         buscarMesas();
@@ -148,7 +144,6 @@ export default function DashboardGlobal() {
       })
       .subscribe();
 
-    // 2. MOTOR DE VARREDURA (Se o WebSocket falhar, o Polling de 5s garante a tela atualizada)
     const intervaloSeguranca = setInterval(() => {
         buscarMesas();
         buscarPedidosCozinha();
@@ -160,67 +155,34 @@ export default function DashboardGlobal() {
     };
   }, [usuarioAtual]);
 
-  // ================= SISTEMA DE LOGIN REAL E SEGURO (GOTRUE) =================
   const efetuarLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginUsuario || !loginSenha) return alert("Preencha email e senha.");
     try {
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email: loginUsuario,
-            password: loginSenha
-        });
-        if (authError || !authData.user) { 
-            alert("Email ou senha incorretos.");
-            return;
-        }
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: loginUsuario, password: loginSenha });
+        if (authError || !authData.user) { alert("Email ou senha incorretos."); return; }
         
-        const { data: perfilData, error: perfilError } = await supabase
-            .from('usuarios')
-            .select('*')
-            .eq('email', loginUsuario)
-            .single();
-        if (perfilError || !perfilData) { 
-            alert("Perfil de acesso não encontrado.");
-            return; 
-        }
+        const { data: perfilData, error: perfilError } = await supabase.from('usuarios').select('*').eq('email', loginUsuario).single();
+        if (perfilError || !perfilData) { alert("Perfil de acesso não encontrado."); return; }
 
         setUsuarioAtual({ id: perfilData.id, nome: perfilData.nome, role: perfilData.role });
         setVisaoAtiva("salao");
-    } catch (err: any) { 
-        alert("Erro de conexão ao fazer login.");
-    }
+    } catch (err: any) { alert("Erro de conexão."); }
   };
 
   const registrarGerente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regNome || !regEmail || !regSenha) return alert("Preencha todos os campos.");
     try {
-        const { error: authError } = await supabase.auth.signUp({
-            email: regEmail,
-            password: regSenha
-        });
+        const { error: authError } = await supabase.auth.signUp({ email: regEmail, password: regSenha });
         if (authError) throw authError;
-
-        await supabase.from('usuarios').insert([{ 
-            nome: regNome, 
-            email: regEmail, 
-            role: "gerente" 
-        }]);
-
-        alert("Gerente cadastrado com sucesso! Agora faça o login.");
+        await supabase.from('usuarios').insert([{ nome: regNome, email: regEmail, role: "gerente" }]);
+        alert("Gerente cadastrado!");
         setIsRegistering(false);
-    } catch (err: any) { 
-        alert("ERRO AO CADASTRAR: " + (err.message || JSON.stringify(err)));
-    }
+    } catch (err: any) { alert("Erro ao cadastrar."); }
   };
 
-  const efetuarLogout = async () => {
-    await supabase.auth.signOut(); 
-    setUsuarioAtual(null); 
-    setLoginUsuario(""); 
-    setLoginSenha(""); 
-    setVisaoAtiva("salao");
-  };
+  const efetuarLogout = async () => { await supabase.auth.signOut(); setUsuarioAtual(null); setVisaoAtiva("salao"); };
   
   const tocarSomAlerta = () => {
     try {
@@ -245,10 +207,9 @@ export default function DashboardGlobal() {
            osc2.start();
            osc2.stop(audioCtx.currentTime + 0.15);
         }, 250);
-    } catch (e) { console.error("Áudio não suportado no navegador", e); }
+    } catch (e) { console.error("Áudio não suportado", e); }
   };
-  
-  // ================= LÓGICA FINANCEIRA E FILTROS DE DATA =================
+
   const dataAtual = new Date();
   const diaSemana = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(dataAtual);
   const dataFormatada = dataAtual.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -271,7 +232,7 @@ export default function DashboardGlobal() {
         const start = new Date(`${dataInicio}T00:00:00`);
         const end = dataFim ? new Date(`${dataFim}T23:59:59`) : new Date(`${dataInicio}T23:59:59`);
         return d >= start && d <= end;
-       }
+      }
       return true;
     });
   }, [historicoVendas, periodoFiltro, dataInicio, dataFim]);
@@ -294,7 +255,7 @@ export default function DashboardGlobal() {
         const start = new Date(`${dataInicio}T00:00:00`);
         const end = dataFim ? new Date(`${dataFim}T23:59:59`) : new Date(`${dataInicio}T23:59:59`);
         return d >= start && d <= end;
-       }
+      }
       return true;
     });
   }, [perdasHistorico, periodoFiltro, dataInicio, dataFim]);
@@ -308,27 +269,18 @@ export default function DashboardGlobal() {
   const dadosGrafico = useMemo(() => {
     const eventos: any[] = [];
     vendasFiltradas.forEach((v: any) => {
-        if (v.data_venda) {
-            eventos.push({ ts: new Date(v.data_venda).getTime(), dataRaw: new Date(v.data_venda), valor: Number(v.total_venda || 0), perda: 0 });
-        }
+        if (v.data_venda) eventos.push({ ts: new Date(v.data_venda).getTime(), dataRaw: new Date(v.data_venda), valor: Number(v.total_venda || 0), perda: 0 });
     });
     perdasFiltradas.forEach((p: any) => {
-        if (p.data_perda) {
-            eventos.push({ ts: new Date(p.data_perda).getTime(), dataRaw: new Date(p.data_perda), valor: 0, perda: Number(p.custo_perda || 0) });
-        }
+        if (p.data_perda) eventos.push({ ts: new Date(p.data_perda).getTime(), dataRaw: new Date(p.data_perda), valor: 0, perda: Number(p.custo_perda || 0) });
     });
-    
     eventos.sort((a: any, b: any) => a.ts - b.ts);
-    
     return eventos.map((ev: any) => {
-        const label = (periodoFiltro === 'dia' || (periodoFiltro === 'custom' && dataInicio === dataFim))
-            ? ev.dataRaw.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-            : ev.dataRaw.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const label = (periodoFiltro === 'dia' || (periodoFiltro === 'custom' && dataInicio === dataFim)) ? ev.dataRaw.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : ev.dataRaw.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         return { data: label, valor: ev.valor, perda: ev.perda };
     });
   }, [vendasFiltradas, perdasFiltradas, periodoFiltro, dataInicio, dataFim]);
   
-  // UNIFICAÇÃO GARANTIDA: Intercala comandas fechadas e perdas na mesma linha do tempo
   const historicoConsolidadoUnificado = useMemo(() => {
     if (periodoFiltro === "dia" || periodoFiltro === "custom") {
         const arrVendas = vendasFiltradas.map((v: any) => ({ ...v, typeObj: 'venda', isConsolidated: false, ts: new Date(v.data_venda).getTime() }));
@@ -350,14 +302,13 @@ export default function DashboardGlobal() {
     });
     return Array.from(mapConsolidado.values());
   }, [vendasFiltradas, perdasFiltradas, periodoFiltro]);
-  
-  // ================= ESTOQUE INTELIGENTE =================
+
   const abrirParaEdicaoInsumo = (i: any) => {
     setInsumoEmEdicao(i.id);
     setNovoInsumo({ nome: i.nome, formato: "unidade", custo_formato: i.custo_unidade.toString(), qtd_comprada: i.estoque.toString(), rendimento: "1" });
     setModalNovoInsumo(true);
   };
-  
+
   const salvarInsumo = async () => {
     try {
         const formato = novoInsumo.formato;
@@ -384,11 +335,7 @@ export default function DashboardGlobal() {
     } catch (err: any) { alert("ERRO SUPABASE (Insumos): Verifique a estrutura da tabela no banco."); }
   };
   
-  // ================= GESTÃO DE PERDAS =================
-  const abrirParaEdicaoPerda = (p: any) => {
-    setPerdaEmEdicao(p);
-    setNovaPerda({ insumo_id: p.insumo_id, quantidade: p.quantidade.toString() }); setModalNovaPerda(true);
-  };
+  const abrirParaEdicaoPerda = (p: any) => { setPerdaEmEdicao(p); setNovaPerda({ insumo_id: p.insumo_id, quantidade: p.quantidade.toString() }); setModalNovaPerda(true); };
 
   const registrarPerda = async () => {
     try {
@@ -400,10 +347,7 @@ export default function DashboardGlobal() {
         let custoPerdido = qtdPerdida * insumo.custo_unidade;
         let deducaoEstoque = qtdPerdida;
 
-        if (insumo.unidade === 'KG' || insumo.unidade === 'L') {
-            custoPerdido = (qtdPerdida / 1000) * insumo.custo_unidade;
-            deducaoEstoque = qtdPerdida / 1000;
-        }
+        if (insumo.unidade === 'KG' || insumo.unidade === 'L') { custoPerdido = (qtdPerdida / 1000) * insumo.custo_unidade; deducaoEstoque = qtdPerdida / 1000; }
 
         if (perdaEmEdicao) {
             let oldDeducao = perdaEmEdicao.quantidade;
@@ -419,38 +363,18 @@ export default function DashboardGlobal() {
     } catch (err: any) { alert("ERRO SUPABASE (Perdas)."); }
   };
 
-  // ================= GESTÃO DE EQUIPE =================
   const salvarNovoUsuario = async () => {
     if (!novoMembro.nome || !novoMembro.email || !novoMembro.senha) return alert("Preencha todos os campos.");
     try {
-        const { error: authError } = await supabase.auth.signUp({
-            email: novoMembro.email,
-            password: novoMembro.senha
-        });
+        const { error: authError } = await supabase.auth.signUp({ email: novoMembro.email, password: novoMembro.senha });
         if (authError) throw authError;
-
-        await supabase.from('usuarios').insert([{ 
-            nome: novoMembro.nome, 
-            email: novoMembro.email, 
-            role: novoMembro.role 
-        }]);
-
-        setModalNovoUsuario(false); 
-        setNovoMembro({ nome: "", email: "", senha: "", role: "colaborador" }); 
-        buscarUsuarios();
-    } catch (err: any) { 
-        alert("ERRO AO CADASTRAR.");
-    }
+        await supabase.from('usuarios').insert([{ nome: novoMembro.nome, email: novoMembro.email, role: novoMembro.role }]);
+        setModalNovoUsuario(false); setNovoMembro({ nome: "", email: "", senha: "", role: "colaborador" }); buscarUsuarios();
+    } catch (err: any) { alert("ERRO AO CADASTRAR."); }
   };
 
-  const removerUsuario = async (id: string) => {
-    if (confirm("Tem certeza que deseja remover este acesso?")) {
-        await supabase.from('usuarios').delete().eq('id', id);
-        buscarUsuarios();
-    }
-  };
+  const removerUsuario = async (id: string) => { if (confirm("Tem certeza que deseja remover este acesso?")) { await supabase.from('usuarios').delete().eq('id', id); buscarUsuarios(); } };
 
-  // ================= CARDÁPIO E RECEITAS =================
   const abrirParaNovoProduto = () => { setProdutoEmEdicao(null); setNovoProd({ nome: "", categoria: "Bebidas", preco: "" }); setReceitaTemp([]); setModalNovoProduto(true); };
   const abrirParaEdicaoProduto = (p: any) => { setProdutoEmEdicao(p.id); setNovoProd({ nome: p.nome, categoria: p.categoria || "Bebidas", preco: p.preco?.toString() || "" }); setReceitaTemp(p.receita || []); setModalNovoProduto(true); };
   
@@ -474,29 +398,19 @@ export default function DashboardGlobal() {
         setModalNovoProduto(false); buscarProdutos();
     } catch (err: any) { alert("ERRO (Produtos)."); }
   };
-  
-  // ================= LÓGICA DE FIADO =================
+
   const abrirGerenciadorFiado = (fiado: any) => {
       const itensDesmembrados: any[] = [];
-      fiado.itens.forEach((item: any) => {
-          for (let i = 0; i < (item.quantidade || 1); i++) {
-              itensDesmembrados.push({ ...item, quantidade: 1 });
-          }
-      });
+      fiado.itens.forEach((item: any) => { for (let i = 0; i < (item.quantidade || 1); i++) { itensDesmembrados.push({ ...item, quantidade: 1 }); } });
       setFiadoEmEdicao({ ...fiado, itens: itensDesmembrados });
-      setItensSelecionadosFiado([]);
-      setModalGerenciarFiado(true);
+      setItensSelecionadosFiado([]); setModalGerenciarFiado(true);
   };
 
   const alternarItemFiado = (idx: number) => { setItensSelecionadosFiado((prev: number[]) => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]); };
-
-  const selecionarTodosFiado = () => {
-      if (itensSelecionadosFiado.length === fiadoEmEdicao?.itens.length) { setItensSelecionadosFiado([]); } 
-      else { setItensSelecionadosFiado(fiadoEmEdicao?.itens.map((_: any, idx: number) => idx) || []); }
-  };
+  const selecionarTodosFiado = () => { if (itensSelecionadosFiado.length === fiadoEmEdicao?.itens.length) { setItensSelecionadosFiado([]); } else { setItensSelecionadosFiado(fiadoEmEdicao?.itens.map((_: any, idx: number) => idx) || []); } };
 
   const receberPagamentoFiado = async () => {
-      if (!fiadoEmEdicao || itensSelecionadosFiado.length === 0) { alert("Selecione pelo menos um item para receber pagamento."); return; }
+      if (!fiadoEmEdicao || itensSelecionadosFiado.length === 0) { alert("Selecione pelo menos um item."); return; }
 
       const itensParaPagar = fiadoEmEdicao.itens.filter((_: any, idx: number) => itensSelecionadosFiado.includes(idx));
       const itensRestantes = fiadoEmEdicao.itens.filter((_: any, idx: number) => !itensSelecionadosFiado.includes(idx));
@@ -511,47 +425,35 @@ export default function DashboardGlobal() {
           if (existente) { existente.quantidade += 1; } else { itensRestantesAgrupados.push({ ...item }); }
       });
       const novoTotal = itensRestantesAgrupados.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
-
+      
       try {
           await supabase.from('vendas').insert([{ total_venda: totalPago, custo_total: custoPago, lucro_total: lucroPago, cliente_nome: `Fiado Pago: ${fiadoEmEdicao.cliente_nome}`, mesa_numero: 0, itens: itensParaPagar }]);
-          
-          if (itensRestantesAgrupados.length === 0) {
-              await supabase.from('fiados').delete().eq('id', fiadoEmEdicao.id);
-          } else {
-              await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', fiadoEmEdicao.id);
-          }
+          if (itensRestantesAgrupados.length === 0) { await supabase.from('fiados').delete().eq('id', fiadoEmEdicao.id); } 
+          else { await supabase.from('fiados').update({ itens: itensRestantesAgrupados, total: novoTotal }).eq('id', fiadoEmEdicao.id); }
 
-          setPessoaAtivaMesa("Todos"); setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]); buscarFiados(); buscarVendas(); alert("Pagamento de fiado recebido com sucesso!");
+          setPessoaAtivaMesa("Todos"); setModalGerenciarFiado(false); setFiadoEmEdicao(null); setItensSelecionadosFiado([]);
+          buscarFiados(); buscarVendas(); alert("Pagamento recebido!");
       } catch (err) { alert("Erro ao receber o fiado."); }
   };
 
-  // ================= FILTROS E CÁLCULOS CIRÚRGICOS DE CHECKOUT POR PESSOA =================
   const itensCheckoutExibidos = useMemo(() => {
     if (!mesaSelecionada?.itens) return [];
     if (modoFechamentoCheckout === "Todos") return mesaSelecionada.itens;
     return mesaSelecionada.itens.filter((i: any) => (i.dono || "Consumidor") === modoFechamentoCheckout);
   }, [mesaSelecionada, modoFechamentoCheckout]);
-  
-  const totalCheckoutCalculado = useMemo(() => {
-    return itensCheckoutExibidos.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
-  }, [itensCheckoutExibidos]);
-  
+
+  const totalCheckoutCalculado = useMemo(() => { return itensCheckoutExibidos.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0); }, [itensCheckoutExibidos]);
+
   useEffect(() => {
     if (modalCheckoutAberto) {
-      const qtd = pessoasSplit;
-      const total = totalCheckoutCalculado;
-      const valorBase = Math.floor((total / qtd) * 100) / 100;
-      const d = parseFloat((total - (valorBase * qtd)).toFixed(2));
+      const qtd = pessoasSplit; const total = totalCheckoutCalculado; const valorBase = Math.floor((total / qtd) * 100) / 100; const d = parseFloat((total - (valorBase * qtd)).toFixed(2));
       setPagamentosSplit(Array.from({ length: qtd }).map((_, i) => ({ id: i + 1, valor: i === qtd - 1 ? valorBase + d : valorBase, metodo: "PIX" })));
     }
   }, [modoFechamentoCheckout, totalCheckoutCalculado, modalCheckoutAberto]);
-  
+
   const handleSplitChange = (qtd: number) => {
-    if (qtd < 1) return;
-    setPessoasSplit(qtd);
-    const total = totalCheckoutCalculado;
-    const valorBase = Math.floor((total / qtd) * 100) / 100;
-    const d = parseFloat((total - (valorBase * qtd)).toFixed(2));
+    if (qtd < 1) return; setPessoasSplit(qtd);
+    const total = totalCheckoutCalculado; const valorBase = Math.floor((total / qtd) * 100) / 100; const d = parseFloat((total - (valorBase * qtd)).toFixed(2));
     setPagamentosSplit(Array.from({ length: qtd }).map((_, i) => ({ id: i + 1, valor: i === qtd - 1 ? valorBase + d : valorBase, metodo: "PIX" })));
   };
 
@@ -561,30 +463,25 @@ export default function DashboardGlobal() {
   
   const confirmarAdicaoOuFusaoPessoa = async () => {
     if (!mesaSelecionada) return;
-    
+
     if (tipoAdicaoPessoa === "nova") {
         const novoNome = inputNovoNomePessoa.trim().toUpperCase();
         if (!novoNome) return alert("Digite um nome válido.");
-        
         const pessoasAtuais = getPessoasDaMesa(mesaSelecionada);
-        if (pessoasAtuais.map(n => n.toUpperCase()).includes(novoNome)) { alert("Essa pessoa já está registrada nesta mesa."); return; }
+        if (pessoasAtuais.map(n => n.toUpperCase()).includes(novoNome)) { alert("Pessoa já registrada."); return; }
 
         const novoClienteStr = mesaSelecionada.cliente ? `${mesaSelecionada.cliente} / ${novoNome}` : novoNome;
-
         try {
             await supabase.from('mesas').update({ cliente: novoClienteStr }).eq('id', mesaSelecionada.id);
             const mesaAtualizada = { ...mesaSelecionada, cliente: novoClienteStr };
             setMesaSelecionada(mesaAtualizada); setPessoaAtivaMesa(novoNome); setInputNovoNomePessoa(""); setModalAdicionarPessoa(false); buscarMesas();
-        } catch (err: any) { alert("Erro ao adicionar pessoa à mesa."); }
-
+        } catch (err: any) { alert("Erro ao adicionar pessoa."); }
     } else {
-        if (!selecaoMesaMesclar) return alert("Selecione uma mesa ativa para mesclar.");
-        
+        if (!selecaoMesaMesclar) return alert("Selecione uma mesa ativa.");
         const mesaOrigem = mesasReais.find((m: any) => String(m.id) === String(selecaoMesaMesclar));
-        if (!mesaOrigem) return alert("Mesa de origem não localizada.");
+        if (!mesaOrigem) return alert("Mesa não localizada.");
 
         const identificadorOrigem = typeof mesaOrigem.numero === 'number' && mesaOrigem.numero >= 1000 ? (mesaOrigem.cliente || "Avulso") : `Mesa ${mesaOrigem.numero}`;
-            
         const itensMesclados = [...mesaSelecionada.itens];
         if (Array.isArray(mesaOrigem.itens)) {
             mesaOrigem.itens.forEach((itemOrigem: any) => {
@@ -598,56 +495,41 @@ export default function DashboardGlobal() {
         const totalMesclado = (Number(mesaSelecionada.total) || 0) + (Number(mesaOrigem.total) || 0);
         const pessoasDestino = getPessoasDaMesa(mesaSelecionada);
         const pessoasOrigem = getPessoasDaMesa(mesaOrigem);
-        
-        pessoasOrigem.forEach((pStr: string) => {
-            const rotulo = pStr === "Consumidor" ? identificadorOrigem : pStr;
-            if (!pessoasDestino.includes(rotulo)) pessoasDestino.push(rotulo);
-        });
-        
+        pessoasOrigem.forEach((pStr: string) => { const rotulo = pStr === "Consumidor" ? identificadorOrigem : pStr; if (!pessoasDestino.includes(rotulo)) pessoasDestino.push(rotulo); });
+
         const clienteMescladoStr = pessoasDestino.join(" / ");
-        
         try {
             await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', mesaSelecionada.id);
             await supabase.from('mesas').delete().eq('id', mesaOrigem.id);
-            
             setMesaSelecionada({ ...mesaSelecionada, total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr });
             setPessoaAtivaMesa(identificadorOrigem); setSelecaoMesaMesclar(""); setModalAdicionarPessoa(false); buscarMesas();
-            alert(`Comandas unificadas com sucesso!`);
-        } catch (err: any) { alert("Erro ao mesclar comandas no banco."); }
+            alert(`Comandas unificadas!`);
+        } catch (err: any) { alert("Erro ao mesclar."); }
     }
   };
 
   const separarPessoaParaAvulso = async (nomePessoa: string) => {
     if (!mesaSelecionada) return;
-    
-    if (confirm(`Deseja realmente separar todos os pedidos de ${nomePessoa} para uma nova comanda independente?`)) {
+    if (confirm(`Deseja separar ${nomePessoa} para uma comanda independente?`)) {
       const itensRestantes = mesaSelecionada.itens.filter((i: any) => (i.dono || "Consumidor") !== nomePessoa);
       const itensSeparados = mesaSelecionada.itens.filter((i: any) => (i.dono || "Consumidor") === nomePessoa);
       const totalRestante = itensRestantes.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
       const totalSeparado = itensSeparados.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
 
       const nomesAtuais = getPessoasDaMesa(mesaSelecionada);
-      const nomesRestantes = nomesAtuais.filter(n => n !== nomePessoa);
-      const novoClienteStr = nomesRestantes.join(" / ") || "Consumidor";
-      
-      const proxAvulso = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
-        Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).map((m: any) => m.numero)) + 1 : 1001;
-        
-      const novaMesaAvulsa = { numero: proxAvulso, status: 'ocupada', cliente: nomePessoa, total: totalSeparado, itens: itensSeparados };
-      
+      const novoClienteStr = nomesAtuais.filter(n => n !== nomePessoa).join(" / ") || "Consumidor";
+      const proxAvulso = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ? Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).map((m: any) => m.numero)) + 1 : 1001;
+
       try {
         await supabase.from('mesas').update({ cliente: novoClienteStr, total: totalRestante, itens: itensRestantes }).eq('id', mesaSelecionada.id);
-        await supabase.from('mesas').insert([novaMesaAvulsa]);
-
-        setMesaSelecionada(null); setPessoaAtivaMesa("Todos"); setFichaMesaAberta(false); buscarMesas();
-        alert(`Comanda de ${nomePessoa} separada com sucesso como Avulso independente!`);
-      } catch (err: any) { alert("Erro ao separar comanda."); }
+        await supabase.from('mesas').insert([{ numero: proxAvulso, status: 'ocupada', cliente: nomePessoa, total: totalSeparado, itens: itensSeparados }]);
+        setMesaSelecionada(null); setPessoaAtivaMesa("Todos"); setFichaMesaAberta(false); buscarMesas(); alert(`Separado com sucesso!`);
+      } catch (err: any) { alert("Erro ao separar."); }
     }
   };
 
   const salvarEdicaoMesa = async () => {
     if (!mesaSelecionada) return;
-    
     const novoNumParsed = parseInt(editMesaNum) || 0;
     const novoNome = editMesaCliente.trim() || "Avulso";
     const numAntigo = mesaSelecionada.numero;
@@ -659,12 +541,9 @@ export default function DashboardGlobal() {
             mesaSelecionada.itens.forEach((itemNovo: any) => {
                 const donoFinal = itemNovo.dono || novoNome;
                 const index = itensMesclados.findIndex((i: any) => i.id === itemNovo.id && (i.dono || "Consumidor") === donoFinal);
-                if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; }
-                else { itensMesclados.push({ ...itemNovo, dono: donoFinal }); }
+                if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; } else { itensMesclados.push({ ...itemNovo, dono: donoFinal }); }
             });
-            
             const totalMesclado = (Number(mesaDestino.total) || 0) + (Number(mesaSelecionada.total) || 0);
-            
             const nomesDestino = getPessoasDaMesa(mesaDestino);
             if (!nomesDestino.includes(novoNome)) nomesDestino.push(novoNome);
             const clienteMescladoStr = nomesDestino.join(" / ");
@@ -672,55 +551,42 @@ export default function DashboardGlobal() {
             await supabase.from('mesas').update({ total: totalMesclado, itens: itensMesclados, cliente: clienteMescladoStr }).eq('id', mesaDestino.id);
             await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
             
-            setMesaSelecionada(null); setPessoaAtivaMesa("Todos"); setFichaMesaAberta(false); setModalEditarMesa(false); buscarMesas();
-            alert(`Comanda unida com sucesso à Mesa ${novoNumParsed}!`);
+            setMesaSelecionada(null); setPessoaAtivaMesa("Todos"); setFichaMesaAberta(false); setModalEditarMesa(false); buscarMesas(); alert(`Comanda unida à Mesa ${novoNumParsed}!`);
         } else {
             const numFinal = novoNumParsed || numAntigo;
             const pessoasAtuais = getPessoasDaMesa(mesaSelecionada);
             let itensAtualizados = mesaSelecionada.itens;
-            if (pessoasAtuais.length <= 1) {
-              itensAtualizados = mesaSelecionada.itens.map((i: any) => ({ ...i, dono: novoNome }));
-            }
+            if (pessoasAtuais.length <= 1) { itensAtualizados = mesaSelecionada.itens.map((i: any) => ({ ...i, dono: novoNome })); }
             await supabase.from('mesas').update({ numero: numFinal, cliente: novoNome, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
             setMesaSelecionada((prev: any) => ({ ...prev, numero: numFinal, cliente: novoNome, itens: itensAtualizados }));
-            setPessoaAtivaMesa("Todos"); setModalEditarMesa(false); buscarMesas();
-            alert("Identificação atualizada com sucesso!");
+            setPessoaAtivaMesa("Todos"); setModalEditarMesa(false); buscarMesas(); alert("Atualizado!");
         }
-    } catch (err: any) { alert("Erro ao editar identificação da mesa."); }
+    } catch (err: any) { alert("Erro ao editar."); }
   };
-  
+
   const finalizarComoFiado = async () => {
     if (!mesaSelecionada) return;
-    
     const isParcial = modoFechamentoCheckout !== "Todos";
     let nomeCliente = isParcial ? modoFechamentoCheckout : mesaSelecionada.cliente;
     
     if (!nomeCliente || nomeCliente.toLowerCase() === 'consumidor' || nomeCliente.toLowerCase() === 'avulso' || nomeCliente.includes('/')) {
-        const inputNome = prompt("Digite o nome da pessoa para abrir ou adicionar ao Fiado:");
-        if (!inputNome) return;
-        nomeCliente = inputNome.trim().toUpperCase();
-    } else {
-        nomeCliente = nomeCliente.trim().toUpperCase();
-    }
+        const inputNome = prompt("Digite o nome da pessoa para o Fiado:");
+        if (!inputNome) return; nomeCliente = inputNome.trim().toUpperCase();
+    } else { nomeCliente = nomeCliente.trim().toUpperCase(); }
 
     const totalFiadoAtual = parseFloat(totalCheckoutCalculado.toFixed(2));
     const itensMesaFiado = itensCheckoutExibidos;
 
     try {
-        const { data: fiadoExistente, error: errBusca } = await supabase.from('fiados').select('*').ilike('cliente_nome', nomeCliente).maybeSingle();
-            
-        if (errBusca) throw errBusca;
+        const { data: fiadoExistente } = await supabase.from('fiados').select('*').ilike('cliente_nome', nomeCliente).maybeSingle();
 
         if (fiadoExistente) {
             const novoTotal = parseFloat(Number(fiadoExistente.total + totalFiadoAtual).toFixed(2));
             let itensMesclados = [...fiadoExistente.itens];
-
             itensMesaFiado.forEach((itemNovo: any) => {
                 const index = itensMesclados.findIndex((i: any) => i.id === itemNovo.id);
-                if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; } 
-                else { itensMesclados.push({ ...itemNovo }); }
+                if (index >= 0) { itensMesclados[index].quantidade += itemNovo.quantidade; } else { itensMesclados.push({ ...itemNovo }); }
             });
-            
             await supabase.from('fiados').update({ total: novoTotal, itens: itensMesclados }).eq('id', fiadoExistente.id);
         } else {
             await supabase.from('fiados').insert([{ cliente_nome: nomeCliente, total: totalFiadoAtual, itens: itensMesaFiado }]);
@@ -736,14 +602,12 @@ export default function DashboardGlobal() {
             await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         }
 
-        setPessoaAtivaMesa("Todos"); setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarFiados();
-        alert(`Fiado salvo com sucesso na conta de ${nomeCliente}!`);
-    } catch (err: any) { alert("Erro ao lançar conta como fiado."); }
+        setPessoaAtivaMesa("Todos"); setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarFiados(); alert(`Fiado salvo!`);
+    } catch (err: any) { alert("Erro ao lançar fiado."); }
   };
 
   const finalizarPagamentoMesa = async () => {
     if (!mesaSelecionada) return;
-    
     const isParcial = modoFechamentoCheckout !== "Todos";
     const itensVenda = itensCheckoutExibidos;
     const totalVenda = parseFloat(totalCheckoutCalculado.toFixed(2));
@@ -754,7 +618,7 @@ export default function DashboardGlobal() {
 
     try {
         await supabase.from('vendas').insert([{ total_venda: totalVenda, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: nomeCliente, mesa_numero: mesaNum, itens: itensVenda || [] }]);
-        
+
         if (isParcial) {
             const itensRestantes = mesaSelecionada.itens.filter((i: any) => (i.dono || "Consumidor") !== modoFechamentoCheckout);
             const totalRestante = itensRestantes.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
@@ -765,57 +629,39 @@ export default function DashboardGlobal() {
             await supabase.from('mesas').delete().eq('id', mesaSelecionada.id);
         }
         
-        setPessoaAtivaMesa("Todos"); setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas();
-        setTimeout(() => buscarVendas(), 400); 
+        setPessoaAtivaMesa("Todos"); setModalCheckoutAberto(false); setMesaSelecionada(null); buscarMesas(); buscarVendas(); 
     } catch (err: any) { alert("ERRO SUPABASE (Vendas)."); }
   };
-  
+
   const abaterValorParcial = async () => {
     if (!mesaSelecionada) return;
-    
     const valorAbate = parseFloat(inputValorParcial.replace(',', '.'));
     if (isNaN(valorAbate) || valorAbate <= 0) return alert("Digite um valor válido para abater.");
     if (valorAbate > totalCheckoutCalculado) return alert("O valor de abate não pode ser maior que o total da conta atual.");
-    
+
     const lucroVenda = parseFloat((valorAbate * 0.60).toFixed(2));
     const custoVenda = parseFloat((valorAbate - lucroVenda).toFixed(2));
     const mesaNum = mesaSelecionada.numero === "Avulso" ? 0 : parseInt(mesaSelecionada.numero) || 0;
-    
     const isParcial = modoFechamentoCheckout !== "Todos";
     const nomeCliente = isParcial ? modoFechamentoCheckout : (mesaSelecionada.cliente || "Consumidor");
 
-    const itemAbate = {
-        id: 'abate-' + Date.now(),
-        nome: `PAGAMENTO PARCIAL`,
-        preco: -valorAbate,
-        quantidade: 1,
-        dono: isParcial ? modoFechamentoCheckout : "Consumidor"
-    };
-
+    const itemAbate = { id: 'abate-' + Date.now(), nome: `PAGAMENTO PARCIAL`, preco: -valorAbate, quantidade: 1, dono: isParcial ? modoFechamentoCheckout : "Consumidor" };
     const itensAtualizados = [...mesaSelecionada.itens, itemAbate];
     const novoTotalMesa = Math.max(0, parseFloat((Number(mesaSelecionada.total) - valorAbate).toFixed(2)));
 
     try {
         await supabase.from('vendas').insert([{ total_venda: valorAbate, custo_total: custoVenda, lucro_total: lucroVenda, cliente_nome: `${nomeCliente} (Parcial)`, mesa_numero: mesaNum, itens: [itemAbate] }]);
         await supabase.from('mesas').update({ total: novoTotalMesa, itens: itensAtualizados }).eq('id', mesaSelecionada.id);
-
-        const mesaAtualizada = { ...mesaSelecionada, total: novoTotalMesa, itens: itensAtualizados };
-        setMesaSelecionada(mesaAtualizada);
         
-        setInputValorParcial("");
-        buscarMesas();
-        setTimeout(() => buscarVendas(), 400);
-        alert(`Valor de R$ ${valorAbate.toFixed(2)} abatido com sucesso!`);
-    } catch (err: any) { alert("ERRO SUPABASE (Abate Parcial)."); }
+        setMesaSelecionada({ ...mesaSelecionada, total: novoTotalMesa, itens: itensAtualizados });
+        setInputValorParcial(""); buscarMesas(); buscarVendas(); alert(`Valor abatido!`);
+    } catch (err: any) { alert("Erro ao abater valor."); }
   };
-  
+
   const cancelarMesa = async (mesa: any, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (usuarioAtual?.role !== 'gerente') {
-      alert("Apenas o gerente pode excluir uma mesa.");
-      return;
-    }
-    if (confirm(`ATENÇÃO: Deseja realmente excluir a comanda de ${mesa.cliente}? \n\nTodos os pedidos serão apagados e o estoque retornado.`)) {
+    e.stopPropagation(); 
+    if (usuarioAtual?.role !== 'gerente') { alert("Apenas o gerente pode excluir."); return; }
+    if (confirm(`ATENÇÃO: Excluir a comanda de ${mesa.cliente}? \n\nO estoque será retornado.`)) {
       try {
         if (mesa.itens && mesa.itens.length > 0) {
           for (const item of mesa.itens) {
@@ -823,89 +669,54 @@ export default function DashboardGlobal() {
             if (p && p.receita && Array.isArray(p.receita)) {
               for (const ing of p.receita) {
                 const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
-                if (insumo) {
-                  let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
-                  const novoEstoque = insumo.estoque + qtdUsada; 
-                  await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
-                }
+                if (insumo) await supabase.from('insumos').update({ estoque: insumo.estoque + (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
               }
             }
           }
         }
         await supabase.from('mesas').delete().eq('id', mesa.id);
         await supabase.from('pedidos_cozinha').delete().eq('mesa', mesa.numero.toString());
-
-        buscarMesas();
-        buscarInsumos();
-        buscarPedidosCozinha();
-        alert("Comanda excluída com sucesso!");
-      } catch(err: any) { alert("Erro ao excluir comanda."); }
+        buscarMesas(); buscarInsumos(); buscarPedidosCozinha();
+      } catch(err: any) { alert("Erro ao excluir."); }
     }
   };
 
   const estornarItemDaComanda = async (mesa: any, indexItem: number, item: any) => {
-    if (usuarioAtual?.role !== 'gerente') {
-      alert("Apenas o gerente pode estornar itens da comanda.");
-      return;
-    }
-    if (confirm(`Deseja remover "${item.quantidade}x ${item.nome}" da comanda?`)) {
+    if (usuarioAtual?.role !== 'gerente') { alert("Apenas o gerente."); return; }
+    if (confirm(`Deseja remover "${item.quantidade}x ${item.nome}"?`)) {
       try {
         const p = produtosBase.find((pb: any) => pb.id === item.id);
         if (p && p.receita && Array.isArray(p.receita)) {
           for (const ing of p.receita) {
             const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
-            if (insumo) {
-              let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
-              const novoEstoque = insumo.estoque + qtdUsada;
-              await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
-            }
+            if (insumo) await supabase.from('insumos').update({ estoque: insumo.estoque + (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
           }
         }
-
-        const novosItens = [...mesa.itens];
-        novosItens.splice(indexItem, 1); 
-        const valorDescontado = item.preco * item.quantidade;
-        const novoTotal = Math.max(0, mesa.total - valorDescontado);
-        
+        const novosItens = [...mesa.itens]; novosItens.splice(indexItem, 1); 
+        const novoTotal = Math.max(0, mesa.total - (item.preco * item.quantidade));
         await supabase.from('mesas').update({ itens: novosItens, total: novoTotal }).eq('id', mesa.id);
-        
-        setMesaSelecionada({ ...mesa, itens: novosItens, total: novoTotal });
-        buscarMesas();
-        buscarInsumos();
-      } catch(err: any) { alert("Erro ao estornar item."); }
+        setMesaSelecionada({ ...mesa, itens: novosItens, total: novoTotal }); buscarMesas(); buscarInsumos();
+      } catch(err: any) { alert("Erro ao estornar."); }
     }
   };
 
   const adicionarMesaSalao = async () => {
     try {
-        const prox = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).length > 0 ?
-            Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).map((m: any) => m.numero)) + 1 : 1;
-        await supabase.from('mesas').insert([{ numero: prox, status: 'livre', total: 0, itens: [] }]);
-        buscarMesas();
-    } catch (err: any) { alert("ERRO SUPABASE (Adicionar Mesa)."); }
+        const prox = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).length > 0 ? Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero < 1000).map((m: any) => m.numero)) + 1 : 1;
+        await supabase.from('mesas').insert([{ numero: prox, status: 'livre', total: 0, itens: [] }]); buscarMesas();
+    } catch (err: any) { alert("ERRO SUPABASE."); }
   };
   
   const interagirComMesa = (mesa: any) => {
-    if (mesa.status === "livre") { 
-        setInputMesaNova(mesa.numero.toString());
-        setInputNomeCliente(""); 
-        setTipoAtendimento("mesa"); 
-        setModalNovaComanda(true);
-    } else { 
-        setMesaSelecionada(mesa); 
-        setPessoaAtivaMesa("Todos");
-        setFichaMesaAberta(true); 
-    }
+    if (mesa.status === "livre") { setInputMesaNova(mesa.numero.toString()); setInputNomeCliente(""); setTipoAtendimento("mesa"); setModalNovaComanda(true); } 
+    else { setMesaSelecionada(mesa); setPessoaAtivaMesa("Todos"); setFichaMesaAberta(true); }
   };
-  
-  const abrirNovoAtendimento = () => { setInputMesaNova(""); setInputNomeCliente("");
-    setTipoAtendimento("avulso"); setModalNovaComanda(true); };
-    
+
+  const abrirNovoAtendimento = () => { setInputMesaNova(""); setInputNomeCliente(""); setTipoAtendimento("avulso"); setModalNovaComanda(true); };
+
   const iniciarAtendimento = async () => {
     const numMesaParsed = parseInt(inputMesaNova) || 0;
-    
-    const proxAvulso = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ?
-        Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).map((m: any) => m.numero)) + 1 : 1001;
+    const proxAvulso = mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).length > 0 ? Math.max(...mesasReais.filter((m: any) => typeof m.numero === 'number' && m.numero >= 1000).map((m: any) => m.numero)) + 1 : 1001;
 
     try {
         let nMesa = null;
@@ -922,13 +733,9 @@ export default function DashboardGlobal() {
             const { data } = await supabase.from('mesas').insert([{ numero: proxAvulso, status: 'ocupada', cliente: inputNomeCliente || "Avulso", total: 0, itens: [] }]).select();
             if (data) nMesa = data[0];
         }
-        setMesaSelecionada(nMesa); 
-        setModalNovaComanda(false); 
-        setPedidoAtual([]); 
-        setPessoaAtivaMesa("Todos");
-        buscarMesas();
+        setMesaSelecionada(nMesa); setModalNovaComanda(false); setPedidoAtual([]); setPessoaAtivaMesa("Todos"); buscarMesas();
         setTimeout(() => { setBuscaProduto(""); setCategoriaAtiva("Todas"); setMenuLateralAberto(true); }, 150);
-    } catch (err: any) { alert("ERRO SUPABASE (Abertura de Mesa)."); }
+    } catch (err: any) { alert("ERRO Abertura de Mesa."); }
   };
 
   const adicionarItem = (p: any) => { setPedidoAtual((prev: any[]) => { const e = prev.find((i: any) => i.id === p.id); return e ? prev.map((i: any) => i.id === p.id ? { ...i, quantidade: i.quantidade + 1 } : i) : [...prev, { ...p, quantidade: 1 }]; }); };
@@ -937,31 +744,19 @@ export default function DashboardGlobal() {
   const confirmarEEnviarPedido = async () => {
     const numMesaApoio = mesaSelecionada?.numero || inputMesaNova || "Avulso";
     const clienteApoio = mesaSelecionada?.cliente || inputNomeCliente || "Cliente";
-    
     const totalRemessa = pedidoAtual.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
     const totalNovo = (Number(mesaSelecionada?.total) || 0) + totalRemessa;
-    const itensAntigos = mesaSelecionada?.itens || [];
-    let itensAtualizados = [...itensAntigos];
+    let itensAtualizados = [...(mesaSelecionada?.itens || [])];
     
     pedidoAtual.forEach((itemNovo: any) => {
         const donoNovo = pessoaAtivaMesa === "Todos" ? (getPessoasDaMesa(mesaSelecionada)[0] || "Consumidor") : pessoaAtivaMesa;
         const index = itensAtualizados.findIndex((i: any) => i.id === itemNovo.id && (i.dono || "Consumidor") === donoNovo);
-        if (index >= 0) { 
-            itensAtualizados[index].quantidade += itemNovo.quantidade; 
-        } else { 
-            itensAtualizados.push({ ...itemNovo, dono: donoNovo }); 
-        }
+        if (index >= 0) { itensAtualizados[index].quantidade += itemNovo.quantidade; } else { itensAtualizados.push({ ...itemNovo, dono: donoNovo }); }
     });
-    
+
     let novoPedidoCozinha: any = null;
     if (pedidoAtual.length > 0) {
-        novoPedidoCozinha = { 
-            id: Date.now().toString(), 
-            mesa: numMesaApoio.toString(), 
-            cliente: clienteApoio, 
-            itens: pedidoAtual, 
-            hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
-        };
+        novoPedidoCozinha = { id: Date.now().toString(), mesa: numMesaApoio.toString(), cliente: clienteApoio, itens: pedidoAtual, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
     }
 
     try {
@@ -969,40 +764,27 @@ export default function DashboardGlobal() {
         await supabase.from('mesas').update({ total: totalNovo, itens: itensAtualizados }).eq('id', mesaId);
         if (mesaSelecionada) setMesaSelecionada({ ...mesaSelecionada, total: totalNovo, itens: itensAtualizados });
         
-        if (novoPedidoCozinha) {
-            await supabase.from('pedidos_cozinha').insert([novoPedidoCozinha]);
-        }
+        if (novoPedidoCozinha) await supabase.from('pedidos_cozinha').insert([novoPedidoCozinha]);
         
         for (const item of pedidoAtual) {
           const p = produtosBase.find((pb: any) => pb.id === item.id);
           if (p && p.receita && Array.isArray(p.receita)) {
               for (const ing of p.receita) {
                   const insumo = insumosBase.find((i: any) => i.id === ing.insumo_id);
-                  if (insumo) {
-                      let qtdUsada = parseFloat(ing.qtd) * item.quantidade;
-                      const novoEstoque = insumo.estoque - qtdUsada;
-                      await supabase.from('insumos').update({ estoque: novoEstoque }).eq('id', insumo.id);
-                  }
+                  if (insumo) await supabase.from('insumos').update({ estoque: insumo.estoque - (parseFloat(ing.qtd) * item.quantidade) }).eq('id', insumo.id);
               }
           }
         }
         
-        setModalConfirmacaoAberto(false);
-        setMenuLateralAberto(false); 
-        setPedidoAtual([]); 
-        buscarInsumos(); 
-        buscarMesas();
-        buscarPedidosCozinha();
-    } catch(err: any) { alert("ERRO SUPABASE (Lançar Pedido)."); }
+        setModalConfirmacaoAberto(false); setMenuLateralAberto(false); setPedidoAtual([]); buscarInsumos(); buscarMesas(); buscarPedidosCozinha();
+    } catch(err: any) { alert("ERRO ao Lançar Pedido."); }
   };
   
   const finalizarPedidoCozinha = async (id: string) => {
     try {
         await supabase.from('pedidos_cozinha').delete().eq('id', id);
         buscarPedidosCozinha();
-    } catch (e: any) {
-        alert("Erro ao excluir o pedido da cozinha.");
-    }
+    } catch (e: any) { alert("Erro ao concluir pedido da cozinha."); }
   };
 
   const itensExibidosCardapio = produtosBase.filter((item: any) => {
@@ -1010,17 +792,16 @@ export default function DashboardGlobal() {
     const matchCat = categoriaAtiva === "Todas" || item.categoria === categoriaAtiva;
     return matchBusca && matchCat;
   });
-  
+
   const itensExibidosMesa = useMemo(() => {
     if (!mesaSelecionada?.itens) return [];
     if (pessoaAtivaMesa === "Todos") return mesaSelecionada.itens;
     return mesaSelecionada.itens.filter((i: any) => (i.dono || "Consumidor") === pessoaAtivaMesa);
   }, [mesaSelecionada, pessoaAtivaMesa]);
-  
-  const subtotalPessoaAtiva = useMemo(() => {
-    return itensExibidosMesa.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0);
-  }, [itensExibidosMesa]);
-  
+
+  const subtotalPessoaAtiva = useMemo(() => { return itensExibidosMesa.reduce((acc: number, i: any) => acc + (i.preco * i.quantidade), 0); }, [itensExibidosMesa]);
+
+  // ================= RENDERIZAÇÃO =================
   if (!usuarioAtual) {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6" style={{ backgroundImage: "radial-gradient(circle at center, #18181b 0%, #09090b 100%)" }}>
@@ -1035,18 +816,9 @@ export default function DashboardGlobal() {
 
            {isRegistering ? (
              <form onSubmit={registrarGerente} className="space-y-6 animate-in fade-in">
-                <div className="space-y-2">
-                   <Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Nome do Gerente</Label>
-                   <Input value={regNome} onChange={e => setRegNome(e.target.value)} placeholder="Seu nome..." className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold px-6 focus:border-yellow-500" />
-                </div>
-                <div className="space-y-2">
-                   <Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Email (Login)</Label>
-                   <Input value={regEmail} onChange={e => setRegEmail(e.target.value)} type="email" placeholder="seu@email.com" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold px-6 focus:border-yellow-500" />
-                </div>
-                <div className="space-y-2">
-                   <Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Senha Forte</Label>
-                   <Input value={regSenha} onChange={e => setRegSenha(e.target.value)} type="password" placeholder="••••••••" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold px-6 focus:border-yellow-500" />
-                </div>
+                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Nome do Gerente</Label><Input value={regNome} onChange={e => setRegNome(e.target.value)} placeholder="Seu nome..." className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold px-6 focus:border-yellow-500" /></div>
+                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Email (Login)</Label><Input value={regEmail} onChange={e => setRegEmail(e.target.value)} type="email" placeholder="seu@email.com" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold px-6 focus:border-yellow-500" /></div>
+                <div className="space-y-2"><Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Senha Forte</Label><Input value={regSenha} onChange={e => setRegSenha(e.target.value)} type="password" placeholder="••••••••" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold px-6 focus:border-yellow-500" /></div>
                 <button type="submit" className="w-full mt-4 bg-yellow-500 text-zinc-950 font-black py-4 rounded-2xl text-lg italic uppercase shadow-xl hover:bg-yellow-400 active:scale-95 transition-all">Criar Acesso</button>
                 <button type="button" onClick={() => setIsRegistering(false)} className="w-full text-zinc-500 hover:text-zinc-300 text-xs font-bold uppercase mt-2">Voltar para Login</button>
              </form>
@@ -1054,31 +826,17 @@ export default function DashboardGlobal() {
              <form onSubmit={efetuarLogin} className="space-y-6 animate-in fade-in">
                 <div className="space-y-2">
                    <Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Email de Acesso</Label>
-                   <div className="relative">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
-                      <Input value={loginUsuario} onChange={e => setLoginUsuario(e.target.value)} type="email" placeholder="email@bar.com" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold pl-12 focus:border-yellow-500 transition-colors" />
-                   </div>
+                   <div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} /><Input value={loginUsuario} onChange={e => setLoginUsuario(e.target.value)} type="email" placeholder="email@bar.com" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold pl-12 focus:border-yellow-500 transition-colors" /></div>
                 </div>
                 <div className="space-y-2">
                    <Label className="text-zinc-500 font-black uppercase text-[10px] ml-2 tracking-widest">Senha</Label>
-                   <div className="relative">
-                      <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
-                      <Input type="password" value={loginSenha} onChange={e => setLoginSenha(e.target.value)} placeholder="••••••••" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold pl-12 focus:border-yellow-500 transition-colors" />
-                   </div>
+                   <div className="relative"><Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} /><Input type="password" value={loginSenha} onChange={e => setLoginSenha(e.target.value)} placeholder="••••••••" className="bg-zinc-950 border-zinc-800 h-14 rounded-2xl text-zinc-50 font-bold pl-12 focus:border-yellow-500 transition-colors" /></div>
                 </div>
-                
                 <div className="flex items-center justify-between px-2 pt-2">
-                   <label className="flex items-center gap-2 cursor-pointer group">
-                       <input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="accent-yellow-500 w-4 h-4 rounded-sm bg-zinc-950 border-zinc-800 cursor-pointer" />
-                      <span className="text-[10px] font-black uppercase text-zinc-500 group-hover:text-zinc-300 transition-colors">Lembrar Senha</span>
-                   </label>
-                 
+                   <label className="flex items-center gap-2 cursor-pointer group"><input type="checkbox" checked={lembrarSenha} onChange={e => setLembrarSenha(e.target.checked)} className="accent-yellow-500 w-4 h-4 rounded-sm bg-zinc-950 border-zinc-800 cursor-pointer" /><span className="text-[10px] font-black uppercase text-zinc-500 group-hover:text-zinc-300 transition-colors">Lembrar Senha</span></label>
                    <button type="button" onClick={() => setIsRegistering(true)} className="text-[10px] font-black uppercase text-yellow-500 hover:text-yellow-400 transition-colors">Criar Conta Mestre</button>
                 </div>
-
-                <button type="submit" className="w-full mt-4 bg-yellow-500 text-zinc-950 font-black py-4 rounded-2xl text-lg italic uppercase shadow-xl hover:bg-yellow-400 active:scale-95 transition-all flex items-center justify-center gap-2">
-                    <LogIn size={20} /> Entrar no Sistema
-                </button>
+                <button type="submit" className="w-full mt-4 bg-yellow-500 text-zinc-950 font-black py-4 rounded-2xl text-lg italic uppercase shadow-xl hover:bg-yellow-400 active:scale-95 transition-all flex items-center justify-center gap-2"><LogIn size={20} /> Entrar no Sistema</button>
              </form>
            )}
         </div>
@@ -1107,7 +865,6 @@ export default function DashboardGlobal() {
 
         <nav className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-full md:w-auto overflow-x-auto">
           <button onClick={() => setVisaoAtiva("salao")} className={`flex-1 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all ${visaoAtiva === "salao" ? "bg-zinc-800 text-yellow-500 shadow-inner" : "text-zinc-500"}`}>Salão</button>
-          
           {usuarioAtual?.role === 'gerente' && (
             <>
               <button onClick={() => setVisaoAtiva("gestao")} className={`flex-1 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all ${visaoAtiva === "gestao" ? "bg-zinc-800 text-yellow-500 shadow-inner" : "text-zinc-500"}`}>Gestão ERP</button>
@@ -1117,9 +874,7 @@ export default function DashboardGlobal() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3 bg-zinc-950 p-2 pr-4 rounded-xl border border-zinc-800">
-           <div className="h-8 w-8 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-700">
-              <User size={14} className="text-yellow-500" />
-            </div>
+           <div className="h-8 w-8 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-700"><User size={14} className="text-yellow-500" /></div>
            <div className="flex flex-col pr-4 border-r border-zinc-800">
              <span className="text-[9px] font-black uppercase text-zinc-500 leading-tight tracking-widest">{usuarioAtual?.role}</span>
              <span className="text-xs font-bold text-zinc-200 leading-tight truncate max-w-[120px]">{usuarioAtual?.nome}</span>
@@ -1133,18 +888,16 @@ export default function DashboardGlobal() {
         <main className="p-6 max-w-7xl mx-auto space-y-6 animate-in fade-in duration-500">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-800 print:border-none print:p-0 print:bg-transparent">
             <div className="flex items-center gap-4"><CalendarIcon className="text-yellow-500" size={32}/><div className="leading-none"><p className="text-xs font-black text-yellow-500 uppercase">{diaSemana}</p><p className="text-xl font-black">{dataFormatada}</p></div></div>
-             
+            
             <div className="flex items-center gap-4 flex-wrap print:hidden justify-center">
                 <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex-wrap justify-center items-center gap-1">
                     {["dia", "semana", "mes", "ano", "custom"].map(p => (
-                         <button key={p} onClick={() => setPeriodoFiltro(p as any)} className={`px-3 py-2 rounded-lg text-xs font-black uppercase transition-all ${periodoFiltro === p ? 'bg-yellow-500 text-zinc-950 shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>
-                            {p === 'custom' ? 'Período Específico' : p}
-                        </button>
+                        <button key={p} onClick={() => setPeriodoFiltro(p as any)} className={`px-3 py-2 rounded-lg text-xs font-black uppercase transition-all ${periodoFiltro === p ? 'bg-yellow-500 text-zinc-950 shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>{p === 'custom' ? 'Período Específico' : p}</button>
                     ))}
                 </div>
 
                 {periodoFiltro === 'custom' && (
-                     <div className="flex items-center gap-2 bg-zinc-950 p-1.5 rounded-xl border border-yellow-500/50 animate-in fade-in">
+                    <div className="flex items-center gap-2 bg-zinc-950 p-1.5 rounded-xl border border-yellow-500/50 animate-in fade-in">
                         <Input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="bg-zinc-900 border-zinc-800 text-xs font-bold h-9 w-32 rounded-lg text-yellow-500" title="Data Inicial" />
                         <span className="text-zinc-500 text-xs font-bold">até</span>
                         <Input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="bg-zinc-900 border-zinc-800 text-xs font-bold h-9 w-32 rounded-lg text-yellow-500" title="Data Final (Opcional)" />
@@ -1152,18 +905,18 @@ export default function DashboardGlobal() {
                 )}
 
                 <button onClick={() => window.print()} className="bg-yellow-500 text-zinc-950 px-4 py-2 rounded-xl font-black uppercase text-xs flex items-center gap-2 hover:bg-yellow-400 transition-all shadow-lg"><Printer size={16} /> Relatório PDF</button>
-              </div>
+             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800 shadow-xl print:border-zinc-300"><p className="text-zinc-500 text-[10px] font-black uppercase mb-1">Faturamento</p><p className="text-3xl font-black text-white italic print:text-black">R$ {fatTotal.toFixed(2)}</p></div>
             <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800 shadow-xl print:border-zinc-300"><p className="text-zinc-500 text-[10px] font-black uppercase mb-1">Lucro Estimado</p><p className="text-3xl font-black text-green-500 italic">R$ {lucTotal.toFixed(2)}</p></div>
-              <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800 shadow-xl print:border-zinc-300"><p className="text-zinc-500 text-[10px] font-black uppercase mb-1">Margem Real</p><p className="text-3xl font-black text-yellow-500 italic">{margem.toFixed(1)}%</p></div>
+             <div className="bg-zinc-900 p-6 rounded-[2rem] border border-zinc-800 shadow-xl print:border-zinc-300"><p className="text-zinc-500 text-[10px] font-black uppercase mb-1">Margem Real</p><p className="text-3xl font-black text-yellow-500 italic">{margem.toFixed(1)}%</p></div>
             <div className="bg-red-950/20 p-6 rounded-[2rem] border border-red-900/30 shadow-xl print:border-zinc-300 print:bg-white"><p className="text-red-500 text-[10px] font-black uppercase mb-1">Desperdício / Perdas</p><p className="text-3xl font-black text-red-500 italic">R$ {totalPerdasFin.toFixed(2)}</p></div>
             <div className="bg-orange-950/20 p-6 rounded-[2rem] border border-orange-900/30 shadow-xl print:border-zinc-300 print:bg-white"><p className="text-orange-500 text-[10px] font-black uppercase mb-1">Fiados na Praça</p><p className="text-3xl font-black text-orange-500 italic">R$ {totalFiadosFin.toFixed(2)}</p></div>
           </div>
 
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
                 
                 <div className="bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-800 h-[380px] shadow-2xl print:border-zinc-300">
@@ -1171,34 +924,28 @@ export default function DashboardGlobal() {
                         <h3 className="text-xl font-black text-white uppercase italic flex items-center gap-2 print:text-black"><TrendingUp className="text-yellow-500" size={20}/> Evolução</h3>
                         <div className="flex gap-4 text-xs font-bold">
                             <span className="text-yellow-500 flex items-center gap-1"><span className="w-2.5 h-2.5 bg-yellow-500 rounded-full inline-block" /> Receitas</span>
-                             <span className="text-red-500 flex items-center gap-1"><span className="w-2.5 h-2.5 bg-red-500 rounded-full inline-block" /> Quebras/Perdas</span>
+                            <span className="text-red-500 flex items-center gap-1"><span className="w-2.5 h-2.5 bg-red-500 rounded-full inline-block" /> Quebras/Perdas</span>
                         </div>
                     </div>
                     <ResponsiveContainer width="100%" height="100%">
-                         <AreaChart data={dadosGrafico}>
+                        <AreaChart data={dadosGrafico}>
                             <defs>
-                                <linearGradient id="colorV" x1="0" y1="0" x2="0" y2="1">
-                                     <stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/>
-                                    <stop offset="95%" stopColor="#eab308" stopOpacity={0}/>
-                                </linearGradient>
-                                 <linearGradient id="colorP" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                                </linearGradient>
+                                <linearGradient id="colorV" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#eab308" stopOpacity={0.3}/><stop offset="95%" stopColor="#eab308" stopOpacity={0}/></linearGradient>
+                                <linearGradient id="colorP" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                             <XAxis dataKey="data" stroke="#71717a" fontSize={10} />
                             <Tooltip contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '1rem' }} />
-                             <Area type="monotone" dataKey="valor" stroke="#eab308" fill="url(#colorV)" strokeWidth={4} name="Faturamento" />
+                            <Area type="monotone" dataKey="valor" stroke="#eab308" fill="url(#colorV)" strokeWidth={4} name="Faturamento" />
                             <Area type="monotone" dataKey="perda" stroke="#ef4444" fill="url(#colorP)" strokeWidth={3} name="Desperdício" />
                         </AreaChart>
                     </ResponsiveContainer>
-                 </div>
+                </div>
 
                 <div className="bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-800 shadow-2xl overflow-hidden print:border-zinc-300">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-xl font-black text-white uppercase italic flex items-center gap-2 print:text-black">
-                             <History className="text-yellow-500" size={20}/> Relatório de {periodoFiltro === 'custom' ? 'Período Específico' : periodoFiltro}
+                            <History className="text-yellow-500" size={20}/> Relatório de {periodoFiltro === 'custom' ? 'Período Específico' : periodoFiltro}
                         </h3>
                         <span className="text-[10px] text-zinc-500 font-bold italic">Clique para abrir detalhes</span>
                     </div>
@@ -1208,37 +955,20 @@ export default function DashboardGlobal() {
                           historicoConsolidadoUnificado.map((v: any, idx: number) => {
                             const isPerda = v.typeObj === 'perda';
                             return (
-                            <div 
-                                key={idx} 
-                                onClick={() => !v.isConsolidated && setItemDetalheFinanceiro(v)} 
-                                className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${!v.isConsolidated ? 'cursor-pointer' : ''} ${isPerda ? 'bg-red-950/10 border-red-900/30 hover:bg-red-950/20 hover:border-red-500/50' : 'bg-zinc-950 border-zinc-800 hover:border-yellow-500/50 hover:bg-zinc-900/50'} print:bg-white print:border-zinc-300`}
-                            >
-                                 {v.isConsolidated ? (
+                            <div key={idx} onClick={() => !v.isConsolidated && setItemDetalheFinanceiro(v)} className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${!v.isConsolidated ? 'cursor-pointer' : ''} ${isPerda ? 'bg-red-950/10 border-red-900/30 hover:bg-red-950/20 hover:border-red-500/50' : 'bg-zinc-950 border-zinc-800 hover:border-yellow-500/50 hover:bg-zinc-900/50'} print:bg-white print:border-zinc-300`}>
+                                {v.isConsolidated ? (
                                  <div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-black text-yellow-500 print:border-zinc-300 print:bg-white"><CalendarIcon size={16}/></div><div><p className="font-black text-zinc-200 uppercase text-xs print:text-black">{v.key}</p><p className="text-[10px] text-zinc-500">{v.count} Mesas Fechadas</p></div></div>
-                                 ) : (
+                                ) : (
                                  <div className="flex items-center gap-4">
-                                     <div className={`h-10 w-10 rounded-full border flex items-center justify-center font-black shrink-0 ${isPerda ? 'bg-red-950/40 border-red-800 text-red-500' : 'bg-zinc-900 border-zinc-800 text-yellow-500'} print:border-zinc-300 print:bg-white`}>
-                                         {isPerda ? <AlertOctagon size={16} /> : <Receipt size={16}/>}
-                                     </div>
+                                     <div className={`h-10 w-10 rounded-full border flex items-center justify-center font-black shrink-0 ${isPerda ? 'bg-red-950/40 border-red-800 text-red-500' : 'bg-zinc-900 border-zinc-800 text-yellow-500'} print:border-zinc-300 print:bg-white`}>{isPerda ? <AlertOctagon size={16} /> : <Receipt size={16}/>}</div>
                                      <div>
-                                          <div className="flex items-center gap-2">
-                                             <p className={`font-black uppercase text-xs truncate max-w-[150px] ${isPerda ? 'text-red-400' : 'text-zinc-200'} print:text-black`}>
-                                                 {isPerda ? v.nome_insumo : v.cliente_nome}
-                                             </p>
-                                             {isPerda && <Badge className="bg-red-500/10 text-red-500 border-red-500/20 text-[8px] px-1 font-bold">PERDA / QUEBRA</Badge>}
-                                         </div>
-                                         <p className="text-[10px] text-zinc-500 font-bold">
-                                             {new Date(isPerda ? v.data_perda : v.data_venda).toLocaleTimeString()} {isPerda ? `• Prejuízo de Insumo` : `• Comanda ${v.mesa_numero || 'Avulsa'}`}
-                                         </p>
+                                         <div className="flex items-center gap-2"><p className={`font-black uppercase text-xs truncate max-w-[150px] ${isPerda ? 'text-red-400' : 'text-zinc-200'} print:text-black`}>{isPerda ? v.nome_insumo : v.cliente_nome}</p>{isPerda && <Badge className="bg-red-500/10 text-red-500 border-red-500/20 text-[8px] px-1 font-bold">PERDA / QUEBRA</Badge>}</div>
+                                         <p className="text-[10px] text-zinc-500 font-bold">{new Date(isPerda ? v.data_perda : v.data_venda).toLocaleTimeString()} {isPerda ? `• Prejuízo de Insumo` : `• Comanda ${v.mesa_numero || 'Avulsa'}`}</p>
                                      </div>
-                                  </div>
+                                 </div>
                                 )}
-                                <div className="text-right shrink-0">
-                                     <p className={`font-black ${isPerda ? 'text-red-500' : 'text-white'} print:text-black`}>
-                                        R$ {v.isConsolidated ? v.total.toFixed(2) : Number(isPerda ? v.custo_perda : v.total_venda).toFixed(2)}
-                                    </p>
-                                </div>
-                             </div>
+                                <div className="text-right shrink-0"><p className={`font-black ${isPerda ? 'text-red-500' : 'text-white'} print:text-black`}>R$ {v.isConsolidated ? v.total.toFixed(2) : Number(isPerda ? v.custo_perda : v.total_venda).toFixed(2)}</p></div>
+                            </div>
                           )})
                         )}
                     </div>
@@ -1378,11 +1108,9 @@ export default function DashboardGlobal() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
              <h2 className="text-2xl font-black uppercase italic tracking-tighter">Salão</h2>
             <div className="flex items-center gap-4">
-                {usuarioAtual?.role === 'gerente' && (
-                    <button onClick={() => setModalPedidosAberto(true)} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs transition-all shadow-xl ${pedidosPendentes.length > 0 ? 'bg-red-600 text-white animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.6)]' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-yellow-500'}`}>
-                          <ChefHat size={16}/> PEDIDOS DE PREPARO {pedidosPendentes.length > 0 && `(${pedidosPendentes.length})`}
-                    </button>
-                )}
+                <button onClick={() => setModalPedidosAberto(true)} className={`px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs transition-all shadow-xl ${pedidosPendentes.length > 0 ? 'bg-red-600 text-white animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.6)]' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-yellow-500'}`}>
+                      <ChefHat size={16}/> PEDIDOS DE PREPARO {pedidosPendentes.length > 0 && `(${pedidosPendentes.length})`}
+                </button>
                 <button onClick={abrirNovoAtendimento} className="bg-zinc-900 text-zinc-400 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:text-yellow-500 transition-all shadow-xl"><PlusCircle size={16}/> NOVO ATENDIMENTO</button>
              </div>
           </div>
